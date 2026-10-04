@@ -49,6 +49,7 @@ Create a professional, high-quality {brand name} coupon deal infographic using t
 - Use realistic product photography with sharp details, accurate proportions, and clean lighting.
 - Do not substitute products with similar-looking alternatives.
 - Do not invent products or include items that are not present in the reference image.
+- The reference image may contain a content creator's watermark, signature, username, social-media handle, or decorative overlay (script handwriting, hearts, stickers, logos), often tiled across the background. Do NOT reproduce, trace, redraw, or blend any of it into the infographic. Replace the background with a clean white surface and keep only the products, prices, coupons, and deal text.
 3. Validity Date
 Directly below the top banner, display the deal's validity date in a highly visible format.
 Example: VALID: [DATE] ONLY
@@ -96,7 +97,7 @@ Calculate all totals carefully using only the prices, quantities, and coupons su
 - Do not guess unreadable details. If information cannot be verified, omit it rather than inventing it.
 - Preserve the meaning of every coupon and its eligibility requirements.
 - Ensure the final price matches the arithmetic of the displayed prices and applicable coupon savings.
-- Do not include couponer names, creator signatures, social media handles, or unrelated text from the source image.
+- Do not include couponer names, creator signatures, social media handles, or unrelated text from the source image. If the reference image contains a watermark or creator overlay, remove it entirely — the finished infographic must contain no trace of it.
 - Use {brand name} consistently for the retailer identity.
 - Do not carry over products, prices, coupons, dates, or colors from previously generated infographics when they are not supported by the current reference image.
 9. Final Output
