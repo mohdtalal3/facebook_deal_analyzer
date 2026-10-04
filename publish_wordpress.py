@@ -339,10 +339,14 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
     skipped = 0
     for i, img_path in enumerate(images, start=1):
         entry = analysis.get(img_path.name) or {}
-        status_flag = entry.get("analysis_status")
         deals = entry.get("deals") or []
-        if status_flag != "success" or not deals:
-            print(f"  [{i}] ⏭️  {img_path.name} — {status_flag or 'no deals'}, skipping")
+        # Exactly one deal publishes — keyed off the deal count (what
+        # analysis_status is derived from) so entries written before the
+        # status field existed still qualify.
+        if len(deals) != 1:
+            label = (entry.get("analysis_status")
+                     or ("multiple_deals" if len(deals) > 1 else "no deals"))
+            print(f"  [{i}] ⏭️  {img_path.name} — {label}, skipping")
             skipped += 1
             continue
         deal = deals[0]

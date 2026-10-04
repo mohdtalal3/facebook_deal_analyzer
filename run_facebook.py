@@ -221,6 +221,7 @@ def _process_one_image(orig_path_str: str, index: int, processed_dir: Path, post
     mapping_entry = {
         "post_id": post_id,
         "deals": analysis.get("deals") or [],
+        "analysis_status": analysis.get("analysis_status"),
     }
     return mapping_filename, image_entry, mapping_entry
 
@@ -679,11 +680,15 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
     eligible: dict = {}
     skipped: dict[str, int] = {}
     for filename, entry in analysis.items():
-        status = entry.get("analysis_status")
-        if status == "success" and entry.get("deals") and (images_dir / filename).exists():
+        # Key off the deal count (what analysis_status is derived from) so
+        # entries written before the status field existed still qualify.
+        deal_count = len(entry.get("deals") or [])
+        if deal_count == 1 and (images_dir / filename).exists():
             eligible[filename] = entry
         else:
-            skipped[status or "unknown"] = skipped.get(status or "unknown", 0) + 1
+            label = (entry.get("analysis_status")
+                     or ("multiple_deals" if deal_count > 1 else "no_deal"))
+            skipped[label] = skipped.get(label, 0) + 1
     if skipped:
         summary = ", ".join(f"{s}: {n}" for s, n in sorted(skipped.items()))
         print(f"⏭️  Skipping infographic generation for {sum(skipped.values())} image(s) — {summary}")
