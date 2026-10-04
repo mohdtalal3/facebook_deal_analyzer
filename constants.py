@@ -23,27 +23,8 @@ PAGE_SCAN_WORKERS = 3               # parallel page/group URL discovery threads 
                                 # scrapers are per-call thread-safe, so this only
                                 # overlaps the long pagination waits)
 
-# ── run_facebook.py publish-prep: scraper analysis ──
-SCRAPER_ANALYSIS = True               # after KIE analysis, look each FOOD image's product up on the
-                                # brand's own site (scrapers/, e.g. AldiSearcher) and attach
-                                # name/price/description — shown on the WordPress page. When
-                                # False, publishing uses only the KIE image-analysis data.
-PRICE_ON_IMAGE = True                     # stamp the scraped price onto the food image itself as a red
-                                # rounded badge (top-right, price_overlay.py) before upload
-SCRAPER_WORKERS = 5                   # parallel keyword-search threads in enrich_food_images_with_scrapes —
-                                # each thread gets its own searcher session (curl_cffi sessions
-                                # are not thread-safe), so N keywords scrape concurrently
-
-# ── run_facebook.py publish-prep: product dedup (before scraper analysis + publishing) ──
-DEDUPE_PRODUCTS = True                # remove duplicate products from food/image_analysis.json after
-                                # analysis — different posts/pages often show the same product;
-                                # duplicates (and their images) are dropped so scrapers and the
-                                # WordPress publisher never see them
-DEDUPE_THRESHOLD = 0.9               # normalized-name similarity ratio (difflib) above which two
-                                # product names count as duplicates
-
-# ── run_facebook.py publish-prep: AI image generation (final stage, after dedup + scraper analysis) ──
-GENERATE_AI_IMAGES = True              # send each single-deal image to KIE (nano-banana-2 via generate.py)
+# ── run_facebook.py publish-prep: AI deal infographics (Phase 3, before publishing) ──
+GENERATE_AI_IMAGES = True                # send each single-deal image to KIE (nano-banana-2 via generate.py)
                                 # to create a new AI-generated coupon-deal infographic; the AI image
                                 # replaces the original. Only images with exactly one deal
                                 # (analysis_status "success") are generated — no_deal / multiple_deals /
@@ -131,20 +112,6 @@ AI_IMAGE_COMPARE = False              # when True, the output/published image is
                                 # the AI-generated image on TOP and the ORIGINAL below it, each
                                 # labeled ("AI GENERATED" / "ORIGINAL") so they're easy to compare.
                                 # Flip off for production publishing (clean AI image only).
-
-# ── publish_wordpress.py publishing ──
-SKIP_PRODUCTS_WITHOUT_PRICE = True     # when True, images whose analysis entry has no scraped
-                                # price (scraped.price) are skipped at publish time — they
-                                # never upload to WordPress or appear on the page. When
-                                # False, everything publishes (price shown only when known).
-MAX_FOOD_PRODUCTS = 50            # cap on food products published per job — after dedupe +
-                                # scraper analysis (clean dataset), products are trimmed to
-                                # this many BEFORE AI generation. Priority: products that
-                                # appeared on many posts first, then all Meat & Seafood,
-                                # then the rest spread round-robin across subcategories.
-                                # 0 = unlimited.
-MAX_NON_FOOD_PRODUCTS = 50        # same cap for non-food (no subcategories there —
-                                # duplicates first, then original order). 0 = unlimited.
 
 # ── image_pipeline.py ──
 MAX_PROCESSED_BYTES = 204800        # 200 KB cap for processed (grayscale) images

@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import shutil
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -11,8 +10,7 @@ import requests
 from dotenv import load_dotenv
 
 import kie_vision
-from constants import AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES
-from data_store import load_workspaces
+from constants import AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, DEAL_INFOGRAPHIC_PROMPT
 from image_pipeline import compress_under_limit
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -214,46 +212,23 @@ def make_comparison_image(ai_path, original_path, out_path) -> bool:
         print(f"  ⚠️  Could not save comparison image: {e}")
         return False
 
-def _render_prompt(template: str, brand: str, product_name: str = "") -> str:
-    """Same convention as run_facebook.render_image_prompt (small helpers are
-    duplicated across modules in this codebase): strip '#' comment lines,
-    then substitute {store} and {product_name}."""
-    body = "\n".join(
-        line for line in template.splitlines()
-        if not line.lstrip().startswith("#")
-    )
-    return body.replace("{store}", brand).replace("{product_name}", product_name or "").strip()
+def _render_prompt(brand: str) -> str:
+    """The built-in deal-infographic master prompt with {brand name}
+    substituted (the workspace image_prompt config was removed)."""
+    return DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "").strip()
 
 
-def find_brand_prompt(brand: str, workspace: str | None = None) -> str | None:
-    """Look up a brand's image_prompt in data/workspaces.json (each workspace
-    configures exactly one brand). `workspace` optionally narrows the search
-    by workspace id or name; otherwise the first workspace configured for
-    that brand with a non-empty prompt wins."""
-    for ws in load_workspaces():
-        if workspace and workspace not in (ws.get("id"), ws.get("name")):
-            continue
-        if ws.get("brand") == brand and (ws.get("image_prompt") or "").strip():
-            return ws["image_prompt"].strip()
-    return None
-
-
-def generate_image(image_path: str, brand: str, product_name: str = "",
+def generate_image(image_path: str, brand: str,
                    output_path: str | None = None) -> str:
-    """Generate one AI image for `image_path` using the brand's workspace
-    image_prompt. Same pipeline as the brand job's AI stage: compress the
-    upload copy under AI_IMAGE_MAX_BYTES → upload → rate-limited createTask
-    → poll → download → compress the result. Returns the output path."""
+    """Generate one AI deal infographic for `image_path` using the built-in
+    DEAL_INFOGRAPHIC_PROMPT. Same pipeline as the brand job's AI stage:
+    upload → rate-limited createTask → poll → download → compress the
+    result. Returns the output path."""
     img_path = Path(image_path)
     if not img_path.exists():
         raise SystemExit(f"❌ Image not found: {img_path}")
 
-    prompt_template = find_brand_prompt(brand)
-    if not prompt_template:
-        raise SystemExit(
-            f"❌ No image_prompt configured for brand '{brand}' in data/workspaces.json "
-            f"(set Image Prompt on the workspace form)")
-    prompt = _render_prompt(prompt_template, brand, product_name)
+    prompt = _render_prompt(brand)
 
     out_path = Path(output_path) if output_path else img_path.with_name(f"{img_path.stem}_ai{img_path.suffix or '.jpg'}")
 
@@ -293,28 +268,15 @@ def generate_image(image_path: str, brand: str, product_name: str = "",
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate one AI image via KIE nano-banana-2, using the brand's "
-                    "image_prompt from data/workspaces.json")
+        description="Generate one AI deal infographic via KIE nano-banana-2, "
+                    "using the built-in DEAL_INFOGRAPHIC_PROMPT")
     parser.add_argument("--image", required=True, help="Path to the source image")
-    parser.add_argument("--brand", required=True, help="Canonical brand name (e.g. 'ALDI') — "
-                        "its workspace image_prompt is used as the generation prompt")
-    parser.add_argument("--workspace", default=None,
-                        help="Optional workspace id or name to disambiguate when several "
-                             "workspaces configure the same brand")
-    parser.add_argument("--product-name", default="",
-                        help="Optional product name substituted into {product_name} in the prompt")
+    parser.add_argument("--brand", required=True, help="Canonical brand name (e.g. 'Dollar General')")
     parser.add_argument("--out", default=None,
                         help="Output path (default: <image>_ai.<ext> next to the source)")
     args = parser.parse_args()
 
-    prompt_template = find_brand_prompt(args.brand, args.workspace)
-    if not prompt_template:
-        hint = f" in workspace '{args.workspace}'" if args.workspace else ""
-        print(f"❌ No image_prompt configured for brand '{args.brand}'{hint} "
-              f"in data/workspaces.json — set Image Prompt on the workspace form.")
-        sys.exit(1)
-
-    generate_image(args.image, args.brand, product_name=args.product_name, output_path=args.out)
+    generate_image(args.image, args.brand, output_path=args.out)
 
 
 if __name__ == "__main__":

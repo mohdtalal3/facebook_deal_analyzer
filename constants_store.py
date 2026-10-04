@@ -35,35 +35,15 @@ EDITABLE: dict[str, tuple] = {
     "MIN_IMAGES_FOR_KEEP": (int, "Pipeline toggles", "Min images to keep",
                             "A post needs more than this many images to be kept (brand filter)"),
 
-    # ── Scraper analysis ──
-    "SCRAPER_ANALYSIS": (bool, "Scraper analysis", "Scraper analysis",
-                         "Look each food image's product up on the brand's own site"),
-    "PRICE_ON_IMAGE": (bool, "Scraper analysis", "Price on image",
-                       "Stamp the scraped price onto the food image as a red badge"),
-    "SCRAPER_WORKERS": (int, "Scraper analysis", "Scraper workers",
-                        "Parallel keyword-search threads (one searcher session per thread)"),
-    "DEDUPE_PRODUCTS": (bool, "Scraper analysis", "Dedupe products",
-                        "Remove duplicate products from image_analysis.json before publishing"),
-    "DEDUPE_THRESHOLD": (float, "Scraper analysis", "Dedupe threshold",
-                         "Name similarity ratio (0-1) above which two products count as duplicates"),
-
-    # ── AI image generation ──
-    "GENERATE_AI_IMAGES": (bool, "AI image generation", "Generate AI images",
-                           "AI-regenerate each food image via KIE nano-banana before publishing"),
-    "AI_IMAGE_MAX_BYTES": (int, "AI image generation", "AI image size cap (bytes)",
+    # ── AI deal infographics ──
+    "GENERATE_AI_IMAGES": (bool, "AI deal infographics", "Generate AI infographics",
+                           "AI-regenerate each single-deal image via KIE nano-banana-2 before publishing"),
+    "AI_IMAGE_MAX_BYTES": (int, "AI deal infographics", "AI image size cap (bytes)",
                            "Upload copy and AI result are compressed under this size"),
-    "AI_IMAGE_WORKERS": (int, "AI image generation", "AI generation workers",
+    "AI_IMAGE_WORKERS": (int, "AI deal infographics", "AI generation workers",
                          "Parallel AI image-generation threads (overlaps the long poll waits)"),
-    "AI_IMAGE_COMPARE": (bool, "AI image generation", "Comparison mode",
+    "AI_IMAGE_COMPARE": (bool, "AI deal infographics", "Comparison mode",
                          "Publish a comparison sheet (AI on top, original below, labeled) instead of the clean AI image"),
-
-    # ── Publishing ──
-    "SKIP_PRODUCTS_WITHOUT_PRICE": (bool, "Publishing", "Skip products without price",
-                                    "Don't upload/publish products whose scrape found no price (off = publish everything)"),
-    "MAX_FOOD_PRODUCTS": (int, "Publishing", "Max food products",
-                          "Cap on food products published per job — extras are removed before AI generation (0 = unlimited)"),
-    "MAX_NON_FOOD_PRODUCTS": (int, "Publishing", "Max non-food products",
-                              "Cap on non-food products published per job — extras are removed before AI generation (0 = unlimited)"),
 
     # ── Image processing ──
     "MAX_PROCESSED_BYTES": (int, "Image processing", "Processed image cap (bytes)",
