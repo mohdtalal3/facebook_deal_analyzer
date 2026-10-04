@@ -492,7 +492,7 @@ def settings_fb_auth_save():
 if __name__ == "__main__":
     print("=" * 50)
     print("  Facebook Product Image Analyzer")
-    print("  http://localhost:5008")
+    print("  http://localhost:5004")
     print("=" * 50)
     sched_module.init_scheduler()
-    app.run(debug=False, host="0.0.0.0", port=5008, use_reloader=False)
+    app.run(debug=False, host="0.0.0.0", port=5004, use_reloader=False)
