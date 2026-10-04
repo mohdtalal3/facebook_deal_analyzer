@@ -8,23 +8,23 @@ instead of hunting through run_facebook.py / kie_vision.py / etc.
 """
 
 # ── run_facebook.py pipeline toggles ──
-FETCH_COMMENTS = False                # skip comment scraping — not needed right now
-ANALYZE_IMAGES = True        # run the KIE upload+analyze workflow at all —
+FETCH_COMMENTS = False                  # skip comment scraping — not needed right now
+ANALYZE_IMAGES = True          # run the KIE upload+analyze workflow at all —
                                  # when False, images are still downloaded/processed
                                  # but never sent to KIE (analysis_status: "skipped")
-MAX_IMAGES_PER_POST = 5            # cap images downloaded/processed/analyzed per post —
+MAX_IMAGES_PER_POST = None              # cap images downloaded/processed/analyzed per post —
                                  # None = no limit (all images; a 50-image hard safety cap
                                  # still applies inside the album walk), or a number to cap
-IMAGE_WORKERS = 5                     # concurrent per-post image processing/analysis threads
-IMAGE_DOWNLOAD_WORKERS = 5            # concurrent per-post image *download* threads (fb_client.download_pending_post_images)
-POSTS_PER_SOURCE_DEFAULT = 500        # default --posts-per-source limit for page/group fetch
-PAGE_SCAN_WORKERS = 3               # parallel page/group URL discovery threads in Phase 1
+IMAGE_WORKERS = 5                       # concurrent per-post image processing/analysis threads
+IMAGE_DOWNLOAD_WORKERS = 5              # concurrent per-post image *download* threads (fb_client.download_pending_post_images)
+POSTS_PER_SOURCE_DEFAULT = 500          # default --posts-per-source limit for page/group fetch
+PAGE_SCAN_WORKERS = 5                 # parallel page/group URL discovery threads in Phase 1
                                 # (each source's post-list fetch runs concurrently; the
                                 # scrapers are per-call thread-safe, so this only
                                 # overlaps the long pagination waits)
 
 # ── run_facebook.py publish-prep: AI deal infographics (Phase 3, before publishing) ──
-GENERATE_AI_IMAGES = True                # send each single-deal image to KIE (nano-banana-2 via generate.py)
+GENERATE_AI_IMAGES = True                  # send each single-deal image to KIE (nano-banana-2 via generate.py)
                                 # to create a new AI-generated coupon-deal infographic; the AI image
                                 # replaces the original. Only images with exactly one deal
                                 # (analysis_status "success") are generated — no_deal / multiple_deals /
@@ -104,27 +104,43 @@ Calculate all totals carefully using only the prices, quantities, and coupons su
 Generate a single, polished, high-resolution promotional infographic that follows this visual system while adapting the number of products and deal sections to the uploaded reference image.
 Important: Reuse the same overall layout, strong branding, realistic product presentation, stacked deal cards, coupon panels, and bold final-price summary for every new image. Adapt the colors, typography, logo treatment, and content to {brand name} and the current reference image. Do not force a particular retailer's branding or color scheme onto another brand."""
 
-AI_IMAGE_MAX_BYTES = 512000        # images are compressed under this size before upload to KIE
+# Optional LAYOUT TEMPLATE for visual consistency across infographics. Put a
+# template image at this path (relative to the project root) and every
+# infographic is generated with it attached as the FIRST reference image —
+# the model copies its layout/structure while the deal image stays the
+# content source of truth. Missing file → generation proceeds without a
+# template (prompt-only consistency).
+INFOGRAPHIC_TEMPLATE_PATH = "assets/infographic_template.jpg"
+
+# Appended to DEAL_INFOGRAPHIC_PROMPT only when the template image is used.
+DEAL_TEMPLATE_PROMPT_SUFFIX = """
+
+TEMPLATE INSTRUCTIONS
+Two images are attached. The FIRST image is a LAYOUT TEMPLATE — an example infographic showing the exact visual structure to reuse: banner placement and style, section order, deal-card design, coupon panel look, typography scale, spacing, and the final price summary panel. Copy that structure as closely as possible so every infographic looks consistent, series after series.
+The SECOND image is the deal reference — the ONLY source of truth for the products, prices, coupon values, terms, dates, and deal math. Do not copy any deal content, products, prices, coupons, or dates from the template image.
+Do not copy any watermark, signature, or creator overlay from either image. Adapt the template's colors, typography, and logo treatment to {brand name} where the template shows a different retailer."""
+
+AI_IMAGE_MAX_BYTES = 512000          # images are compressed under this size before upload to KIE
                                 # and the AI result is compressed under it before publishing
-AI_IMAGE_WORKERS = 5                  # parallel AI image-generation threads (upload→createTask→poll→download
+AI_IMAGE_WORKERS = 5                    # parallel AI image-generation threads (upload→createTask→poll→download
                                 # per image; the shared KIE rate limiter keeps the total under the
                                 # account cap, so this only overlaps the long poll waits)
-AI_IMAGE_COMPARE = False              # when True, the output/published image is a comparison sheet:
+AI_IMAGE_COMPARE = False                # when True, the output/published image is a comparison sheet:
                                 # the AI-generated image on TOP and the ORIGINAL below it, each
                                 # labeled ("AI GENERATED" / "ORIGINAL") so they're easy to compare.
                                 # Flip off for production publishing (clean AI image only).
 
 # ── image_pipeline.py ──
-MAX_PROCESSED_BYTES = 204800        # 200 KB cap for processed (grayscale) images
-MIN_QUALITY = 20                        # floor for JPEG quality before we start downscaling
-MIN_SCALE = 0.25                        # floor for resolution downscale factor
+MAX_PROCESSED_BYTES = 204800          # 200 KB cap for processed (grayscale) images
+MIN_QUALITY = 20                          # floor for JPEG quality before we start downscaling
+MIN_SCALE = 0.25                          # floor for resolution downscale factor
 
 # ── kie_vision.py rate limiter ──
-KIE_MAX_REQUESTS_PER_WINDOW = 18        # stay under KIE's ~20 requests/10s account cap
+KIE_MAX_REQUESTS_PER_WINDOW = 18          # stay under KIE's ~20 requests/10s account cap
 KIE_RATE_WINDOW_SECONDS = 10
 
 # ── zip_export.py ──
-ZIP_MAX_AGE_SECONDS = 86400         # sweep exports older than this on every new build
+ZIP_MAX_AGE_SECONDS = 86400           # sweep exports older than this on every new build
 
 # ── brand filtering / output organization (run_facebook.py) ──
-MIN_IMAGES_FOR_KEEP = 2         # a post needs more than 1 image to be kept (see brand_mapping.py)
+MIN_IMAGES_FOR_KEEP = 1           # a post needs more than 1 image to be kept (see brand_mapping.py)

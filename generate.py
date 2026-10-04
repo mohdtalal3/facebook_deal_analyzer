@@ -10,7 +10,7 @@ import requests
 from dotenv import load_dotenv
 
 import kie_vision
-from constants import AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, DEAL_INFOGRAPHIC_PROMPT
+from constants import AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, DEAL_INFOGRAPHIC_PROMPT, DEAL_TEMPLATE_PROMPT_SUFFIX
 from image_pipeline import compress_under_limit
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -51,7 +51,12 @@ def upload_image(file_path: str) -> str:
         tmp.unlink(missing_ok=True)
 
 
-def create_task(image_url: str, prompt_file: str = None, prompt: str = None) -> str:
+def create_task(image_urls, prompt_file: str = None, prompt: str = None) -> str:
+    """Create one nano-banana-2 task. `image_urls` is a single public URL or
+    a list of them (up to 14) — e.g. [template_url, deal_image_url] when a
+    layout template is used."""
+    if isinstance(image_urls, str):
+        image_urls = [image_urls]
     payload = {
         "model": "nano-banana-2",
         "input": {
@@ -63,7 +68,7 @@ def create_task(image_url: str, prompt_file: str = None, prompt: str = None) -> 
             # prompt/image_input/aspect_ratio are set — resolution and
             # output_format use the API defaults.
             "prompt": prompt if prompt is not None else load_prompt(prompt_file),
-            "image_input": [image_url],
+            "image_input": image_urls[:14],
             "aspect_ratio": "9:16",
         },
     }
@@ -218,17 +223,23 @@ def _render_prompt(brand: str) -> str:
     return DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "").strip()
 
 
-def generate_image(image_path: str, brand: str,
-                   output_path: str | None = None) -> str:
+def generate_image(image_path: str, brand: str, output_path: str | None = None,
+                   template_path: str | None = None) -> str:
     """Generate one AI deal infographic for `image_path` using the built-in
-    DEAL_INFOGRAPHIC_PROMPT. Same pipeline as the brand job's AI stage:
-    upload → rate-limited createTask → poll → download → compress the
-    result. Returns the output path."""
+    DEAL_INFOGRAPHIC_PROMPT. With `template_path` (or the shared
+    data/infographic_template.jpg when it exists), the template is attached
+    as the FIRST reference image for layout consistency. Same pipeline as
+    the brand job's AI stage: upload → rate-limited createTask → poll →
+    download → compress the result. Returns the output path."""
     img_path = Path(image_path)
     if not img_path.exists():
         raise SystemExit(f"❌ Image not found: {img_path}")
 
+    template = Path(template_path or (
+        Path(__file__).parent / "assets" / "infographic_template.jpg"))
     prompt = _render_prompt(brand)
+    if template.exists():
+        prompt += DEAL_TEMPLATE_PROMPT_SUFFIX.replace("{brand name}", brand or "")
 
     out_path = Path(output_path) if output_path else img_path.with_name(f"{img_path.stem}_ai{img_path.suffix or '.jpg'}")
 
@@ -241,8 +252,14 @@ def generate_image(image_path: str, brand: str,
     public_url = upload_image(str(img_path))
     print(f"Uploaded: {public_url}")
 
+    image_urls = [public_url]
+    if template.exists():
+        template_url = upload_image(str(template))
+        print(f"Template: {template_url}")
+        image_urls = [template_url, public_url]  # template FIRST (layout), deal second (content)
+
     kie_vision.rate_limiter.acquire()
-    task_id = create_task(public_url, prompt=prompt)
+    task_id = create_task(image_urls, prompt=prompt)
     print(f"Task    : {task_id}")
     result_url = poll_task(task_id)
     print(f"Result  : {result_url}")
@@ -274,9 +291,11 @@ def main():
     parser.add_argument("--brand", required=True, help="Canonical brand name (e.g. 'Dollar General')")
     parser.add_argument("--out", default=None,
                         help="Output path (default: <image>_ai.<ext> next to the source)")
+    parser.add_argument("--template", default=None,
+                        help="Layout-template image path (default: data/infographic_template.jpg when it exists)")
     args = parser.parse_args()
 
-    generate_image(args.image, args.brand, output_path=args.out)
+    generate_image(args.image, args.brand, output_path=args.out, template_path=args.template)
 
 
 if __name__ == "__main__":

@@ -60,7 +60,8 @@ from constants import (
     FETCH_COMMENTS, ANALYZE_IMAGES, MAX_IMAGES_PER_POST, IMAGE_WORKERS,
     POSTS_PER_SOURCE_DEFAULT, MIN_IMAGES_FOR_KEEP,
     AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, AI_IMAGE_WORKERS,
-    DEAL_INFOGRAPHIC_PROMPT, GENERATE_AI_IMAGES, PAGE_SCAN_WORKERS,
+    DEAL_INFOGRAPHIC_PROMPT, DEAL_TEMPLATE_PROMPT_SUFFIX,
+    GENERATE_AI_IMAGES, INFOGRAPHIC_TEMPLATE_PATH, PAGE_SCAN_WORKERS,
 )
 
 SOURCE_MAX_ATTEMPTS = 3
@@ -677,6 +678,23 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
     images_dir = deals_dir / "images"
     prompt = DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "")
 
+    # Optional layout template (constants.INFOGRAPHIC_TEMPLATE_PATH): when the
+    # file exists it's uploaded ONCE per job and attached as the FIRST
+    # reference image of every task — the model copies its layout so all
+    # infographics stay visually consistent; the deal image (second) stays
+    # the content source of truth.
+    template_path = Path(__file__).resolve().parent / INFOGRAPHIC_TEMPLATE_PATH
+    template_url = None
+    if template_path.exists():
+        try:
+            template_url = generate.upload_image(str(template_path))
+            prompt += DEAL_TEMPLATE_PROMPT_SUFFIX.replace("{brand name}", brand or "")
+            print(f"  📐 Layout template attached: {template_path.name} → {template_url}")
+        except Exception as e:
+            print(f"  ⚠️  Template upload failed ({e}) — generating without the layout template")
+    else:
+        print(f"  ℹ️  No layout template at {INFOGRAPHIC_TEMPLATE_PATH} — generating without one")
+
     eligible: dict = {}
     skipped: dict[str, int] = {}
     for filename, entry in analysis.items():
@@ -721,7 +739,8 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
         try:
             public_url = generate.upload_image(str(img_path))
             kie_vision.rate_limiter.acquire()
-            task_id = generate.create_task(public_url, prompt=prompt)
+            image_urls = [template_url, public_url] if template_url else public_url
+            task_id = generate.create_task(image_urls, prompt=prompt)
             result_url = generate.poll_task(task_id)
             result_path = scratch_dir / f"result_{filename}"
             generate.download_image(result_url, str(result_path))
