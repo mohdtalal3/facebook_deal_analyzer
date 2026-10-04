@@ -32,93 +32,35 @@ GENERATE_AI_IMAGES = True                  # send each single-deal image to KIE 
                                 # multiple deals). When False, the original image is kept as-is.
                                 # The prompt is DEAL_INFOGRAPHIC_PROMPT below with {brand_name}
                                 # substituted; the workspace image_prompt config is no longer used.
-DEAL_INFOGRAPHIC_PROMPT = """{brand name} Coupon Infographic — Reusable Master Prompt
-Create a professional, high-quality {brand name} coupon deal infographic using the attached reference image as the source of truth for product images, prices, coupon discounts, deal calculations, and promotional details.
-1. Overall Design and Branding
-- Create a clean, premium, eye-catching promotional flyer for {brand name}.
-- Use a vertical 2:3 or 9:16 layout, optimized for Pinterest Pins, Facebook posts, and Instagram Stories.
-- Use a clean white background with the brand's recognizable colors and visual identity, based on the reference image.
-- Place a large, bold {brand name} banner at the top, using the appropriate brand colors and typography.
-- Use bold, highly readable sans-serif typography.
-- Maintain a polished retail-advertisement aesthetic with strong visual hierarchy.
-- Do not add unnecessary decorative graphics, watermarks, signatures, extra logos, or unrelated visual elements.
-2. Product Image Section
-- Carefully analyze the attached reference image and use the exact products shown.
-- Preserve the correct product packaging, brand names, colors, bottle shapes, labels, and quantities.
-- Display the products prominently near the top, arranged neatly side by side.
-- Use realistic product photography with sharp details, accurate proportions, and clean lighting.
-- Do not substitute products with similar-looking alternatives.
-- Do not invent products or include items that are not present in the reference image.
-- The reference image may contain a content creator's watermark, signature, username, social-media handle, or decorative overlay (script handwriting, hearts, stickers, logos), often tiled across the background. Do NOT reproduce, trace, redraw, or blend any of it into the infographic. Replace the background with a clean white surface and keep only the products, prices, coupons, and deal text.
-3. Validity Date
-Directly below the top banner, display the deal's validity date in a highly visible format.
-Example: VALID: [DATE] ONLY
-Use the date supplied in the reference image or provided instructions. Do not assume a new date or invent a date if none is provided.
-4. Individual Deal Sections
-Below the product lineup, create separate, clearly organized deal sections arranged vertically.
-Each deal section should include:
-- A small, accurate image of the relevant product on the left.
-- The product brand and name in bold black text.
-- A short product description and size, if available.
-- The original retail price, prominently displayed.
-- The applicable coupon or discount in a highlighted coupon panel on the right.
-- Clear coupon terms, including qualifying quantities, sizes, or spending requirements when provided.
-Use thin borders or subtle background colors that complement {brand name} to separate deal sections. Maintain consistent spacing, alignment, and typography throughout.
-5. Coupon Panels
-- Use clearly visible coupon headers labeled DIGITAL COUPON, COUPON, or the exact terminology shown in the reference image.
-- Display coupon values in large, bold, highly readable text.
-- Use colors consistent with the retailer's branding and the reference image.
-- Preserve coupon conditions and exclusions accurately.
-- Do not invent additional coupons, discounts, or promotional offers.
-6. Final Deal Breakdown
-At the bottom, include a prominent savings summary panel.
-List each product, its price, and the quantity purchased. Then display:
-- TOTAL: Sum of the original product prices.
-- COUPON SAVINGS: Total value of all applicable coupons.
-- FINAL PRICE: Total after coupon deductions.
-- + TAX: Where applicable.
-Use a bold, high-contrast summary area alongside a highly visible final-price panel.
-Example layout:
-TOTAL: $28.25
-COUPON SAVINGS: −$17.50
-PAY $10.75 + TAX
-Calculate all totals carefully using only the prices, quantities, and coupons supplied in the reference. Avoid arithmetic errors, duplicate coupon deductions, or applying coupons to ineligible products.
-7. Layout and Readability
-- Use a strictly vertical, top-to-bottom scrolling layout.
-- Keep the top banner, product showcase, deal sections, coupon details, and final price summary in that order.
-- Make all text large enough to read on mobile devices.
-- Prevent text clipping, overlapping elements, cut-off products, and cramped spacing.
-- Keep adequate margins around the edges.
-- Use consistent alignment, spacing, and section heights.
-- Prioritize accurate deal information over decorative styling.
-8. Accuracy Rules
-- Treat the uploaded image as the primary reference.
-- Carefully extract all product names, quantities, prices, coupon values, conditions, and dates before designing.
-- Do not guess unreadable details. If information cannot be verified, omit it rather than inventing it.
-- Preserve the meaning of every coupon and its eligibility requirements.
-- Ensure the final price matches the arithmetic of the displayed prices and applicable coupon savings.
-- Do not include couponer names, creator signatures, social media handles, or unrelated text from the source image. If the reference image contains a watermark or creator overlay, remove it entirely — the finished infographic must contain no trace of it.
-- Use {brand name} consistently for the retailer identity.
-- Do not carry over products, prices, coupons, dates, or colors from previously generated infographics when they are not supported by the current reference image.
-9. Final Output
-Generate a single, polished, high-resolution promotional infographic that follows this visual system while adapting the number of products and deal sections to the uploaded reference image.
-Important: Reuse the same overall layout, strong branding, realistic product presentation, stacked deal cards, coupon panels, and bold final-price summary for every new image. Adapt the colors, typography, logo treatment, and content to {brand name} and the current reference image. Do not force a particular retailer's branding or color scheme onto another brand."""
+DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand name} using the attached image(s) and the OFFICIAL DEAL DATA listed at the end. Follow the template's layout: brand banner at top, date pill below it, product photo area, one card per coupon, savings summary panel at the bottom.
 
-# Optional LAYOUT TEMPLATE for visual consistency across infographics. Put a
-# template image at this path (relative to the project root) and every
-# infographic is generated with it attached as the FIRST reference image —
-# the model copies its layout/structure while the deal image stays the
-# content source of truth. Missing file → generation proceeds without a
-# template (prompt-only consistency).
-INFOGRAPHIC_TEMPLATE_PATH = "assets/infographic_template.jpg"
+{inputs_block}
 
-# Appended to DEAL_INFOGRAPHIC_PROMPT only when the template image is used.
-DEAL_TEMPLATE_PROMPT_SUFFIX = """
+TASK
+1. Product photo: take the main product photo from the deal reference exactly as-is (all products together as one scene), remove its background, and place it on a clean white background in the product area. Do not crop products into individual slots and do not redraw them.
+2. Coupons: place every Digital Coupon panel from the deal reference AS-IS — each coupon is ONE complete card (its image and text together), exactly as it appears in the reference. Do not redesign, re-type, split, or add coupons. The number of coupon cards must match the reference.
+3. Savings summary: fill the summary panel using ONLY the OFFICIAL DEAL DATA below — every product with its price, then TOTAL, COUPON SAVINGS, and the final PAY amount.
+4. Date: if the OFFICIAL DEAL DATA includes a date, show it in the date pill. If there is no date, leave the date pill out of the infographic entirely.
 
-TEMPLATE INSTRUCTIONS
-Two images are attached. The FIRST image is a LAYOUT TEMPLATE — an example infographic showing the exact visual structure to reuse: banner placement and style, section order, deal-card design, coupon panel look, typography scale, spacing, and the final price summary panel. Copy that structure as closely as possible so every infographic looks consistent, series after series.
-The SECOND image is the deal reference — the ONLY source of truth for the products, prices, coupon values, terms, dates, and deal math. Do not copy any deal content, products, prices, coupons, or dates from the template image.
-Do not copy any watermark, signature, or creator overlay from either image. Adapt the template's colors, typography, and logo treatment to {brand name} where the template shows a different retailer."""
+RULES
+- Never reproduce any watermark, signature, handwriting, creator name, or social-media handle from either image.
+- Do not draw placeholder frames, dashed boxes, or slot borders in the finished infographic — the template's dashed areas only mark where content goes.
+- No extra decorations, starbursts, or text beyond the template structure and the summary.
+- Bold readable text, clean white background, consistent spacing and alignment."""
+
+# LAYOUT TEMPLATE — REQUIRED, one per brand, for visual consistency and
+# brand-matched colors. Every brand MUST have assets/templates/<brand-slug>.jpg
+# (e.g. assets/templates/dollar-general.jpg). It is attached as the FIRST
+# reference image — the model copies its layout/structure while the deal
+# image stays the content source of truth. A brand without its template
+# skips infographic generation (config error — create the file).
+INFOGRAPHIC_TEMPLATE_DIR = "assets/templates"
+
+# The {inputs_block} section of DEAL_INFOGRAPHIC_PROMPT — which images are
+# attached and what each one is for.
+DEAL_INPUTS_BLOCK = """INPUTS
+- IMAGE 1 (layout template): the exact frame to reuse — copy its layout, colors, and styling. Its card count is an example only; match the reference's coupon count.
+- IMAGE 2 (deal reference): the source of truth for the product photo and the coupon panels."""
 
 AI_IMAGE_MAX_BYTES = 512000          # images are compressed under this size before upload to KIE
                                 # and the AI result is compressed under it before publishing

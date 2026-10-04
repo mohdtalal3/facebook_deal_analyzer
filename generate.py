@@ -10,7 +10,11 @@ import requests
 from dotenv import load_dotenv
 
 import kie_vision
-from constants import AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, DEAL_INFOGRAPHIC_PROMPT, DEAL_TEMPLATE_PROMPT_SUFFIX
+import brand_mapping
+from constants import (
+    AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, DEAL_INFOGRAPHIC_PROMPT,
+    DEAL_INPUTS_BLOCK, INFOGRAPHIC_TEMPLATE_DIR,
+)
 from image_pipeline import compress_under_limit
 
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
@@ -218,28 +222,31 @@ def make_comparison_image(ai_path, original_path, out_path) -> bool:
         return False
 
 def _render_prompt(brand: str) -> str:
-    """The built-in deal-infographic master prompt with {brand name}
-    substituted (the workspace image_prompt config was removed)."""
-    return DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "").strip()
+    """The built-in deal-infographic prompt with {brand name} and the
+    {inputs_block} section substituted (the template is always IMAGE 1)."""
+    return (DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "")
+            .replace("{inputs_block}", DEAL_INPUTS_BLOCK)).strip()
 
 
 def generate_image(image_path: str, brand: str, output_path: str | None = None,
                    template_path: str | None = None) -> str:
     """Generate one AI deal infographic for `image_path` using the built-in
-    DEAL_INFOGRAPHIC_PROMPT. With `template_path` (or the shared
-    data/infographic_template.jpg when it exists), the template is attached
-    as the FIRST reference image for layout consistency. Same pipeline as
-    the brand job's AI stage: upload → rate-limited createTask → poll →
-    download → compress the result. Returns the output path."""
+    DEAL_INFOGRAPHIC_PROMPT and the REQUIRED per-brand layout template
+    (assets/templates/<brand-slug>.jpg, or --template for testing). Same
+    pipeline as the brand job's AI stage: upload → rate-limited createTask →
+    poll → download → compress the result. Returns the output path."""
     img_path = Path(image_path)
     if not img_path.exists():
         raise SystemExit(f"❌ Image not found: {img_path}")
 
-    template = Path(template_path or (
-        Path(__file__).parent / "assets" / "infographic_template.jpg"))
+    brand_slug = brand_mapping.brand_slug(brand) if brand else None
+    template = Path(template_path) if template_path else (
+        Path(__file__).parent / INFOGRAPHIC_TEMPLATE_DIR / f"{brand_slug}.jpg")
+    if not template.exists():
+        raise SystemExit(
+            f"❌ No layout template for brand '{brand}' at {template} — create "
+            f"assets/templates/<brand-slug>.jpg first.")
     prompt = _render_prompt(brand)
-    if template.exists():
-        prompt += DEAL_TEMPLATE_PROMPT_SUFFIX.replace("{brand name}", brand or "")
 
     out_path = Path(output_path) if output_path else img_path.with_name(f"{img_path.stem}_ai{img_path.suffix or '.jpg'}")
 
@@ -253,10 +260,9 @@ def generate_image(image_path: str, brand: str, output_path: str | None = None,
     print(f"Uploaded: {public_url}")
 
     image_urls = [public_url]
-    if template.exists():
-        template_url = upload_image(str(template))
-        print(f"Template: {template_url}")
-        image_urls = [template_url, public_url]  # template FIRST (layout), deal second (content)
+    template_url = upload_image(str(template))
+    print(f"Template: {template_url}")
+    image_urls = [template_url, public_url]  # template FIRST (layout), deal second (content)
 
     kie_vision.rate_limiter.acquire()
     task_id = create_task(image_urls, prompt=prompt)

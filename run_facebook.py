@@ -60,8 +60,8 @@ from constants import (
     FETCH_COMMENTS, ANALYZE_IMAGES, MAX_IMAGES_PER_POST, IMAGE_WORKERS,
     POSTS_PER_SOURCE_DEFAULT, MIN_IMAGES_FOR_KEEP,
     AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, AI_IMAGE_WORKERS,
-    DEAL_INFOGRAPHIC_PROMPT, DEAL_TEMPLATE_PROMPT_SUFFIX,
-    GENERATE_AI_IMAGES, INFOGRAPHIC_TEMPLATE_PATH, PAGE_SCAN_WORKERS,
+    DEAL_INFOGRAPHIC_PROMPT, DEAL_INPUTS_BLOCK,
+    GENERATE_AI_IMAGES, INFOGRAPHIC_TEMPLATE_DIR, PAGE_SCAN_WORKERS,
 )
 
 SOURCE_MAX_ATTEMPTS = 3
@@ -644,6 +644,27 @@ def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
     return processed_ids, all_mapping
 
 
+def _deal_data_block(deal: dict) -> str:
+    """Render the extracted deal's NUMBERS as an official-data block appended
+    to the infographic prompt. Only the fields the model actually writes
+    itself (validity banner + savings summary panel) are injected — never the
+    prose fields (name/summary), which would tempt it to create new text
+    containers. The GPT-6 Luna extraction read these values in a dedicated
+    pass, so they're more reliable than the generation model's own reading of
+    the reference image."""
+    lines = ["OFFICIAL DEAL DATA — verified extraction from the reference image. Use these "
+             "exact values for the validity banner and the savings summary panel; they "
+             "override anything you read yourself. Do not add any new text containers for them:",
+             f"- Validity/availability: {deal.get('availability') or '(not shown)'}",
+             f"- Items with quantities: {deal.get('items') or '(not listed)'}",
+             f"- Original total: {deal.get('price') or '(not shown)'}"]
+    coupons = deal.get("coupons_to_use") or []
+    if coupons:
+        lines.append("- Coupons: " + "; ".join(str(c) for c in coupons))
+    lines.append(f"- FINAL COST to pay: {deal.get('final_cost') or '(not shown)'}")
+    return "\n" + "\n".join(lines)
+
+
 def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None) -> int:
     """AI deal-infographic stage — turns each single-deal image into a
     branded coupon-deal infographic via KIE (generate.py, nano-banana-2),
@@ -654,11 +675,13 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
     skipped — one infographic can't carry multiple deals, and a no-deal
     image has nothing to render (multi-deal deals stay stored in the entry
     for reference). The prompt is constants.DEAL_INFOGRAPHIC_PROMPT with
-    {brand name} substituted from the workspace brand — the reference image
-    itself is the deal's source of truth, so no per-deal fields are injected
-    (the workspace image_prompt config is no longer used). Toggled by
-    constants.GENERATE_AI_IMAGES. Returns the number of images regenerated.
-    Never raises per image — a failure just keeps the original."""
+    {brand name} substituted from the workspace brand, plus the extracted
+    deal's numbers (dates/items/prices/coupons/final cost) as an
+    official-data block for the validity banner and savings summary — the
+    reference image itself stays the visual source of truth (products and
+    coupon panels are placed as-is). Toggled by constants.GENERATE_AI_IMAGES.
+    Returns the number of images regenerated. Never raises per image — a
+    failure just keeps the original."""
     if not GENERATE_AI_IMAGES:
         return 0
     if not brand_slug:
@@ -676,24 +699,26 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
         return 0
 
     images_dir = deals_dir / "images"
-    prompt = DEAL_INFOGRAPHIC_PROMPT.replace("{brand name}", brand or "")
+    prompt = (DEAL_INFOGRAPHIC_PROMPT
+              .replace("{brand name}", brand or "")
+              .replace("{inputs_block}", DEAL_INPUTS_BLOCK))
 
-    # Optional layout template (constants.INFOGRAPHIC_TEMPLATE_PATH): when the
-    # file exists it's uploaded ONCE per job and attached as the FIRST
-    # reference image of every task — the model copies its layout so all
-    # infographics stay visually consistent; the deal image (second) stays
-    # the content source of truth.
-    template_path = Path(__file__).resolve().parent / INFOGRAPHIC_TEMPLATE_PATH
-    template_url = None
-    if template_path.exists():
-        try:
-            template_url = generate.upload_image(str(template_path))
-            prompt += DEAL_TEMPLATE_PROMPT_SUFFIX.replace("{brand name}", brand or "")
-            print(f"  📐 Layout template attached: {template_path.name} → {template_url}")
-        except Exception as e:
-            print(f"  ⚠️  Template upload failed ({e}) — generating without the layout template")
-    else:
-        print(f"  ℹ️  No layout template at {INFOGRAPHIC_TEMPLATE_PATH} — generating without one")
+    # REQUIRED layout template: assets/templates/<brand-slug>.jpg — uploaded
+    # ONCE per job and attached as the FIRST reference image of every task
+    # (the model copies its layout so all infographics stay visually
+    # consistent); the deal image (second) stays the content source of truth.
+    # A brand without its template is a config error — the stage is skipped.
+    template_path = Path(__file__).resolve().parent / INFOGRAPHIC_TEMPLATE_DIR / f"{brand_slug}.jpg"
+    if not template_path.exists():
+        print(f"⚠️  No layout template for {brand_slug} at {template_path} — create it "
+              f"(assets/templates/<brand-slug>.jpg) — skipping AI deal-infographic generation.")
+        return 0
+    try:
+        template_url = generate.upload_image(str(template_path))
+        print(f"  📐 Layout template attached: {template_path} → {template_url}")
+    except Exception as e:
+        print(f"  ⚠️  Template upload failed ({e}) — skipping AI deal-infographic generation.")
+        return 0
 
     eligible: dict = {}
     skipped: dict[str, int] = {}
@@ -737,10 +762,12 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
         if entry.get("ai_image"):  # already generated in a previous run — don't regenerate
             return False
         try:
+            deal = (entry.get("deals") or [{}])[0]
+            image_prompt = prompt + _deal_data_block(deal if isinstance(deal, dict) else {})
             public_url = generate.upload_image(str(img_path))
             kie_vision.rate_limiter.acquire()
             image_urls = [template_url, public_url] if template_url else public_url
-            task_id = generate.create_task(image_urls, prompt=prompt)
+            task_id = generate.create_task(image_urls, prompt=image_prompt)
             result_url = generate.poll_task(task_id)
             result_path = scratch_dir / f"result_{filename}"
             generate.download_image(result_url, str(result_path))
