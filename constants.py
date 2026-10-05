@@ -42,6 +42,13 @@ TASK
 3. Savings summary: fill the summary panel using ONLY the OFFICIAL DEAL DATA below — every product with its price, then TOTAL, COUPON SAVINGS, and the final PAY amount.
 4. Date: if the OFFICIAL DEAL DATA includes a date, show it in the date pill. If there is no date, leave the date pill out of the infographic entirely.
 
+STRICT RULE — NOTHING INVENTED
+Take EVERYTHING from the deal reference image. Never create, add, or assume anything by yourself:
+- Do NOT add any Digital Coupon panel that is not visible in the deal reference — not even one that "would fit" the deal. If the reference shows no coupons, the infographic has no coupon cards.
+- Do NOT add any product, price, item, brand, or offer that is not visible in the deal reference.
+- Do NOT invent or fill in missing coupon values, terms, sizes, or dates — if something is not readable in the reference, omit it.
+- The OFFICIAL DEAL DATA may only be used for the savings summary and the date pill — never as a source for new coupon panels or products.
+
 RULES
 - Never reproduce any watermark, signature, handwriting, creator name, or social-media handle from either image.
 - Do not draw placeholder frames, dashed boxes, or slot borders in the finished infographic — the template's dashed areas only mark where content goes.
