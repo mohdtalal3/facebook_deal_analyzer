@@ -154,6 +154,8 @@ items
 - List every product included in the deal.
 - Use the full Brand + Product Type name for each product.
 - Include quantities where applicable.
+- If a product's price is CLEARLY readable in the image, append it to that item using the format "quantity × Product Name — $X.XX" (e.g. "1 × all Free Clear Liquid Laundry Detergent — $4.00"). For a quantity with a per-unit price, use "— $4.00 each".
+- If a product's price is NOT clearly readable, list that item WITHOUT a price — never guess, estimate, or invent a price. It is correct for some items to have prices and others not.
 - Do not use a brand name alone when a recognizable product type is available.
 - Do not add sizes, flavors, scents, or packaging details to a product name unless necessary to distinguish a qualifying product. Such details may be included in the description when relevant.
 - For bundles, list all participating products clearly.
