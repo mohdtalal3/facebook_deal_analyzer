@@ -34,6 +34,8 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 
+import constants
+from feature_image import build_feature_image
 from wordpress_publisher import WordPressPublisher
 
 # Load .env from project root (WP_URL_RS/... or WP_URL/... per publish target)
@@ -283,24 +285,35 @@ def build_deals_page_html(items: list[tuple], brand: str) -> str:
     return html
 
 
-def build_page_title(brand: str, template: str | None = None,
-                     week_start_day: str | None = None, today=None) -> str:
-    """Page title for a brand's weekly deals update. Config comes from the
-    workspace (page_title template + week_start day); placeholders {brand}
-    and {date_range} are substituted. The week window defaults to
-    Friday → Thursday (ALDI's ad-week); Publix etc. can set their own start
-    day. Default template:
-    "Just Spotted at ALDI: This Week's Deals Everyone's Grabbing (9/11 – 9/17)".
-    A custom workspace template is used as-is."""
+def week_date_range(week_start_day: str | None = None, today=None) -> str:
+    """The week window for the page title / feature image, e.g. "9/11 – 9/17".
+    The week starts on `week_start_day` (default friday — ALDI's ad-week)."""
     today = today or date.today()
     start_idx = WEEKDAY_INDEX.get((week_start_day or "friday").strip().lower(), 4)
     days_since_start = (today.weekday() - start_idx) % 7
     week_start = today - timedelta(days=days_since_start)
     week_end = week_start + timedelta(days=6)
-    date_range = f"{week_start.month}/{week_start.day} – {week_end.month}/{week_end.day}"
+    return f"{week_start.month}/{week_start.day} – {week_end.month}/{week_end.day}"
+
+
+def build_page_title(brand: str, template: str | None = None,
+                     week_start_day: str | None = None, today=None,
+                     count: int | None = None) -> str:
+    """Page title for a brand's weekly deals update. Config comes from the
+    workspace (page_title template + week_start day); placeholders {brand},
+    {date_range} and {count} (the published deal count — used by the feature
+    image) are substituted. The week window defaults to
+    Friday → Thursday (ALDI's ad-week); Publix etc. can set their own start
+    day. Default template:
+    "Just Spotted at ALDI: This Week's Deals Everyone's Grabbing (9/11 – 9/17)".
+    A custom workspace template is used as-is."""
+    date_range = week_date_range(week_start_day, today)
     tpl = (template or "").strip() or \
         "Just Spotted at {brand}: This Week’s Deals Everyone’s Grabbing ({date_range})"
-    return tpl.replace("{brand}", brand).replace("{date_range}", date_range)
+    title = tpl.replace("{brand}", brand).replace("{date_range}", date_range)
+    if count is not None:
+        title = title.replace("{count}", str(count))
+    return title
 
 
 def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
@@ -371,10 +384,37 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
     if skipped:
         print(f"⏭️  {skipped} image(s) skipped (no single deal — same rule as the infographic stage)")
 
-    print(f"\n🎨 Building page HTML ({len(uploaded)} deal(s))...")
-    html = build_deals_page_html(uploaded, brand)
+    # FEATURE (hero) image: the brand's feature template with the workspace's
+    # page-title template rendered into it — the SAME title config as the
+    # page itself ({brand}/{date_range}, plus {count} for the published deal
+    # count). Rendered with Pillow (no AI generation — deterministic, free,
+    # instant). Failure is non-fatal (the page just publishes without the hero).
+    feature_html = ""
+    feature_title = build_page_title(brand, template=page_title,
+                                     week_start_day=week_start_day,
+                                     count=len(uploaded))
+    feature_path = deals_dir / "feature_image.jpg"
+    if build_feature_image(brand, brand_slug, feature_title, str(feature_path)):
+        media_id = publisher.upload_image(feature_path, title=feature_title)
+        if media_id:
+            try:
+                resp = requests.get(f"{publisher.api_base}/media/{media_id}", auth=publisher.auth, timeout=15)
+                src = resp.json().get("source_url") if resp.status_code == 200 else None
+            except Exception as e:
+                print(f"  ⚠️  Could not resolve feature image URL: {e}")
+                src = None
+            if src:
+                feature_html = (f'<div style="text-align:center;margin:0 auto 15px;">'
+                                f'<img src="{escape(src)}" alt="{escape(feature_title)}" '
+                                f'style="max-width:600px;width:100%;height:auto;display:block;" /></div>')
+                print(f"  🖼️  Feature image uploaded: {feature_title}")
 
-    page_title = build_page_title(brand, template=page_title, week_start_day=week_start_day)
+    print(f"\n🎨 Building page HTML ({len(uploaded)} deal(s))...")
+    html = feature_html + build_deals_page_html(uploaded, brand)
+
+    page_title = build_page_title(brand, template=page_title,
+                                  week_start_day=week_start_day,
+                                  count=len(uploaded))
     print(f"\n📤 Updating WordPress page {page_id} as {status.upper()}...")
     print(f"   Title: {page_title}")
     success = publisher.update_page(

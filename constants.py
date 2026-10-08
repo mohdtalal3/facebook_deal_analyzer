@@ -63,6 +63,13 @@ RULES
 # skips infographic generation (config error — create the file).
 INFOGRAPHIC_TEMPLATE_DIR = "assets/templates"
 
+# FEATURE (hero) image template — one per brand, shown at the very top of the
+# published WordPress page with the dynamic page title rendered into it:
+# "Top {N} {brand} Deals in This Week ({date_range})" — N is the published
+# deal count and the date range is the week window (week_start). Missing
+# file → the page publishes without a hero image.
+FEATURE_TEMPLATE_DIR = "assets/feature_templates"
+
 # The {inputs_block} section of DEAL_INFOGRAPHIC_PROMPT — which images are
 # attached and what each one is for.
 DEAL_INPUTS_BLOCK = """INPUTS

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-KIE AI coupon-deal extraction (GPT-6 Luna via the /codex/v1/responses
+KIE AI coupon-deal extraction (GPT-5.6 Luna via the /codex/v1/responses
 endpoint).
 
 Uploads a local (processed) image to get a public URL — reusing KIE's own
 file-stream-upload endpoint, the same one this project already used for
-image generation — then sends that URL to GPT-6 Luna to extract the
+image generation — then sends that URL to GPT-5.6 Luna to extract the
 complete coupon deal shown in the image (replaced the earlier
 brand/product/category extraction, and the Gemini Flash model this
 extraction used immediately before).
@@ -154,8 +154,8 @@ items
 - List every product included in the deal.
 - Use the full Brand + Product Type name for each product.
 - Include quantities where applicable.
-- If a product's price is CLEARLY readable in the image, append it to that item using the format "quantity × Product Name — $X.XX" (e.g. "1 × all Free Clear Liquid Laundry Detergent — $4.00"). For a quantity with a per-unit price, use "— $4.00 each".
-- If a product's price is NOT clearly readable, list that item WITHOUT a price — never guess, estimate, or invent a price. It is correct for some items to have prices and others not.
+# - If a product's price is CLEARLY readable in the image, append it to that item using the format "quantity × Product Name — $X.XX" (e.g. "1 × all Free Clear Liquid Laundry Detergent — $4.00"). For a quantity with a per-unit price, use "— $4.00 each".
+# - If a product's price is NOT clearly readable, list that item WITHOUT a price — never guess, estimate, or invent a price. It is correct for some items to have prices and others not.
 - Do not use a brand name alone when a recognizable product type is available.
 - Do not add sizes, flavors, scents, or packaging details to a product name unless necessary to distinguish a qualifying product. Such details may be included in the description when relevant.
 - For bundles, list all participating products clearly.
@@ -419,7 +419,7 @@ def _parse_deal_response(text: str) -> list[dict]:
 
 
 def analyze_deal_image(image_url: str, brand_name: str, timeout: int = 600) -> dict:
-    """Call KIE GPT-6 Luna to extract the coupon deal(s) from an image,
+    """Call KIE GPT-5.6 Luna to extract the coupon deal(s) from an image,
     using the workspace's retailer brand as the deal context.
 
     Returns {"deals": [deal, ...], "tokens_used": ..., "credits_consumed":
@@ -429,7 +429,7 @@ def analyze_deal_image(image_url: str, brand_name: str, timeout: int = 600) -> d
     """
     prompt = DEAL_EXTRACTION_PROMPT.replace("{brand_name}", brand_name or "")
     payload = {
-        "model": "gpt-6-luna",
+        "model": "gpt-5-6-luna",
         "stream": False,  # endpoint defaults to SSE streaming — we want one JSON response back
         "input": [
             {
@@ -443,10 +443,11 @@ def analyze_deal_image(image_url: str, brand_name: str, timeout: int = 600) -> d
         "reasoning": {"effort": "medium"},
     }
 
-    # 429-aware retry: KIE rejects (does not queue) requests over the
-    # account's 20-per-10s cap — e.g. when several brand jobs' limiters
-    # collectively overshoot. Back off a full window per attempt instead of
-    # failing the image outright.
+    # Retry loop: 429 (rate limit — KIE rejects, does not queue, requests
+    # over the account's 20-per-10s cap) and 5xx (server errors — 500/501/
+    # 502/503 etc.) both get up to 3 attempts. 429 backs off a full rate
+    # window per attempt; 5xx backs off briefly (server-side hiccups usually
+    # clear in seconds).
     response = None
     for attempt in range(1, 4):
         rate_limiter.acquire()
@@ -457,10 +458,15 @@ def analyze_deal_image(image_url: str, brand_name: str, timeout: int = 600) -> d
             timeout=timeout,
         )
        # print(response.json())
-        if response.status_code != 429:
+        status = response.status_code
+        if status == 429:
+            wait = KIE_RATE_WINDOW_SECONDS * attempt
+            print(f"  ⚠️ KIE rate limit hit (429), attempt {attempt}/3 — waiting {wait}s")
+        elif status >= 500:
+            wait = 5 * attempt
+            print(f"  ⚠️ KIE server error ({status}), attempt {attempt}/3 — waiting {wait}s")
+        else:
             break
-        wait = KIE_RATE_WINDOW_SECONDS * attempt
-        print(f"  ⚠️ KIE rate limit hit (429), attempt {attempt}/3 — waiting {wait}s")
         if attempt < 3:
             time.sleep(wait)
     response.raise_for_status()
