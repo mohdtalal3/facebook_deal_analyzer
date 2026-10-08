@@ -34,6 +34,9 @@ _FONT_CANDIDATES = [
 #   banner_box: (x0, y0, x1, y1) — skips banner auto-detection
 #   template:   explicit template path — skips the per-brand lookup
 BRAND_OVERRIDES: dict[str, dict] = {
+    # CVS: the auto-detection locks onto the blue SKY (the largest saturated
+    # band), not the frame — pin the white frame interior as the text area.
+    "cvs": {"banner_box": (205, 305, 828, 590)},
     # "dollar-general": {"text_color": (25, 25, 25)},
 }
 

@@ -73,3 +73,84 @@ regenerating from scratch.
       one dashed product zone / two unified empty cards / SAVINGS SUMMARY
       with `PAY $XX.XX + TAX`)
 - [ ] Workspace created with that brand + a WordPress page ID
+
+---
+
+# Feature (Hero) Template Generator — Reusable Prompt
+
+Second recipe: the FEATURE image shown at the top of the published page
+(`assets/feature_templates/<brand-slug>.jpg`). Structure: a landscape
+storefront photo with a large rounded frame in the brand color and an EMPTY
+white interior panel — the page title is rendered into that panel later by
+`feature_image.py` (Pillow), so the panel must contain NO text.
+
+Inputs:
+1. **Reference feature template** — an existing one to copy the composition
+   from (e.g. `assets/feature_templates/dollar-general.jpg`).
+2. **Official brand logo** (`assets/logos/<brand-slug>.png`) — optional; for
+   store-signage accuracy reference only.
+
+---
+
+## The prompt (fill in the two {PLACEHOLDERS})
+
+```
+Recreate this exact feature-image layout with new retailer branding. Keep the composition IDENTICAL to the reference template (IMAGE 1) — same landscape orientation, same storefront-photo style, same large rounded frame covering the center of the image, same proportions and spacing:
+1. Background: a realistic photo of a {BRAND NAME} storefront (brick building, parking lot in front, store signage visible) — same photographic style as the reference.
+2. Centered over the photo: one large rounded-rectangle frame in {BRAND COLORS — e.g. "Dollar General yellow #FFE01B with a thin white inner border"} with a completely EMPTY solid white interior panel.
+3. The white interior panel must stay EMPTY — no text, no logos, nothing. (The page title is rendered into it later by code.)
+
+CHANGE ONLY THE BRANDING: the storefront photo shows {BRAND NAME}'s store (signage style and colors matching the brand), and the frame color is {BRAND COLORS}.
+
+STYLE RULES:
+- Realistic photographic storefront, flat clean frame graphic on top.
+- The white panel is a solid, clean, empty surface — this is critical.
+- Absolutely NO watermarks, signatures, handwriting, creator names, handles, or decorative overlays anywhere.
+- No extra text anywhere except what naturally appears on the store's own signage.
+- Sharp, high-resolution, correctly spelled signage.
+```
+
+---
+
+## How to run it
+
+### Via the pipeline (recommended)
+
+```python
+from pathlib import Path
+import generate
+from image_pipeline import compress_under_limit
+
+REFERENCE_FEATURE = "assets/feature_templates/dollar-general.jpg"  # composition to copy
+LOGO = "assets/logos/<brand-slug>.png"                             # optional signage reference
+OUT = "assets/feature_templates/<brand-slug>.jpg"
+
+prompt = """<paste the filled-in prompt here>"""
+
+ref_url = generate.upload_image(REFERENCE_FEATURE)
+logo_url = generate.upload_image(LOGO)
+task_id = generate.create_task([ref_url, logo_url], prompt=prompt, aspect_ratio="auto")
+url = generate.poll_task(task_id)
+generate.download_image(url, OUT)
+compress_under_limit(OUT, 600 * 1024)
+```
+
+(`aspect_ratio="auto"` keeps the landscape composition — the 9:16 infographic
+pin would re-frame it into a tall poster.)
+
+### Via ChatGPT (manual alternative)
+
+Attach the reference feature template FIRST (and the logo SECOND if you have
+it), paste the filled-in prompt. If the model puts text in the white panel,
+reply: "keep the exact same image, but make the white panel completely empty."
+
+---
+
+## Checklist for a new brand's feature template
+
+- [ ] Generated and saved as `assets/feature_templates/<brand-slug>.jpg`
+- [ ] Landscape, storefront photo matches the brand
+- [ ] Frame in the brand color, white interior panel COMPLETELY EMPTY
+- [ ] Test render: `python3 feature_image.py --brand "<Brand>" --title "Top 20 <Brand> Deals in This Week (10/19 – 10/25)"`
+- [ ] If the title lands in the wrong place (e.g. the sky), add a pinned
+      `banner_box` for the brand in `feature_image.BRAND_OVERRIDES`

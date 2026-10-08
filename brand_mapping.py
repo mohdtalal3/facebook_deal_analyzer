@@ -29,14 +29,15 @@ BRAND_KEYWORDS: dict[str, list[str]] = {
     "Trader Joe's": ["tj", "trader joe's", "trader joes"],
     "Costco": ["costco"],
     "Publix": ["publix"],
-    "Kroger": ["kroger"],
+    "Kroger": ["kroger", "krogers"],
     "Winn-Dixie": ["winn dixie", "winndixie", "winn dixie"],
     "Five Below": ["five below", "fivebelow"],
     "Food Lion": ["food lion", "foodlion"],
     "Dollar General": ["dollar general", "dg", "d_g", "d g"],
     "Dollar Tree": ["dollar tree", "dollartree"],
     "Family Dollar": ["family dollar", "familydollar", "fam dollar", "famdollar"],
-    "Walgreens": ["walgreens", "walgreen"],
+    "CVS": ["cvs", "cvspharmacy", "cvshealth", "cvs pharmacy", "cvs health"],
+    "Walgreens": ["walgreens", "walgreen", "wags"],
 }
 
 # Canonical brand -> output folder slug (see CONTEXT.md output layout).
@@ -58,6 +59,7 @@ BRAND_SLUGS: dict[str, str] = {
     "Dollar Tree": "dollar-tree",
     "Dollar General": "dollar-general",
     "Family Dollar": "family-dollar",
+    "CVS": "cvs",
     "Walgreens": "walgreens",
 }
 
@@ -85,11 +87,15 @@ for _brand, _keywords in BRAND_KEYWORDS.items():
         # "#SamsClub" / "#TraderJoes" / "#DollarGeneral" (multi-word brands
         # fused without the space), and "#ALDIFinds" / "#WalmartFinds" /
         # "#AldiFinds" / "#HyVeeFinds" etc. (brand + finds/haul/deals/run
-        # suffix — the standard grocery-haul hashtag format).
+        # suffix — the standard grocery-haul hashtag format). Suffix list
+        # covers the common coupon-community forms: #WalmartClearance,
+        # #WalgreensCouponing, #CVSCouponer, #CVSBreakdown, #TargetRun/
+        # #TargetTrip, #CVSMoneyMaker, #CVSHealth, #WalgreensNews, ...
         _fused = _n.replace(" ", "")
         if _fused != _n:
             _patterns.append(re.compile(r"\b" + re.escape(_fused) + r"\b"))
-        _patterns.append(re.compile(r"\b" + re.escape(_fused) + r"(?:finds?|hauls?|deals?|runs?)\b"))
+        _patterns.append(re.compile(r"\b" + re.escape(_fused) +
+            r"(?:finds?|hauls?|deals?|runs?|trips?|news|clearance|couponing|coupons?|couponers?|savings?|shopping|breakdowns?|moneymakers?|health)\b"))
     _KEYWORD_PATTERNS[_brand] = _patterns
 
 
