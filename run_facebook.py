@@ -47,7 +47,7 @@ from pathlib import Path
 
 import requests
 
-import analysis
+import analysis as deal_analysis
 import brand_mapping
 import fb_client
 import image_pipeline
@@ -199,7 +199,7 @@ def _process_one_image(orig_path_str: str, index: int, processed_dir: Path, post
             analysis = {"deals": [], "analysis_status": "skipped"}
         else:
             try:
-                result = analysis.analyze_deal_image(processed_path, brand_name)
+                result = deal_analysis.analyze_deal_image(processed_path, brand_name)
                 # Status by deal count: `no_deal` (model replied `false`),
                 # `success` (exactly one deal), `multiple_deals` (more than
                 # one independent deal — kept for reference but skipped by
