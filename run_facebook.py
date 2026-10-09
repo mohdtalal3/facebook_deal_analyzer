@@ -47,22 +47,30 @@ from pathlib import Path
 
 import requests
 
+import analysis
 import brand_mapping
 import fb_client
 import image_pipeline
-import kie_vision
 import generate
-from generate import make_comparison_image
+import gpt_generate
 from image_pipeline import compress_under_limit
+from kie_ratelimit import rate_limiter
 from publish_wordpress import publish_brand
 from data_store import load_fb_auth
 from constants import (
     FETCH_COMMENTS, ANALYZE_IMAGES, MAX_IMAGES_PER_POST, IMAGE_WORKERS,
     POSTS_PER_SOURCE_DEFAULT, MIN_IMAGES_FOR_KEEP,
-    AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, AI_IMAGE_WORKERS,
+    AI_IMAGE_BACKEND, AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, AI_IMAGE_WORKERS,
     DEAL_INFOGRAPHIC_PROMPT, DEAL_INPUTS_BLOCK,
     GENERATE_AI_IMAGES, INFOGRAPHIC_TEMPLATE_DIR, PAGE_SCAN_WORKERS,
 )
+
+# AI image-generation backend (constants.AI_IMAGE_BACKEND): both modules share
+# the same interface (upload_image / create_task / poll_task / download_image /
+# make_comparison_image), so every call site below stays untouched.
+if AI_IMAGE_BACKEND == "gpt":
+    generate = gpt_generate
+make_comparison_image = generate.make_comparison_image
 
 SOURCE_MAX_ATTEMPTS = 3
 
@@ -191,8 +199,7 @@ def _process_one_image(orig_path_str: str, index: int, processed_dir: Path, post
             analysis = {"deals": [], "analysis_status": "skipped"}
         else:
             try:
-                public_url = kie_vision.upload_image(processed_path)
-                result = kie_vision.analyze_deal_image(public_url, brand_name)
+                result = analysis.analyze_deal_image(processed_path, brand_name)
                 # Status by deal count: `no_deal` (model replied `false`),
                 # `success` (exactly one deal), `multiple_deals` (more than
                 # one independent deal — kept for reference but skipped by
@@ -204,7 +211,7 @@ def _process_one_image(orig_path_str: str, index: int, processed_dir: Path, post
                           else "multiple_deals")
                 analysis = {**result, "analysis_status": status}
             except Exception as e:
-                print(f"  ⚠️  KIE analysis failed for {orig_path.name}: {e}")
+                print(f"  ⚠️  OpenAI analysis failed for {orig_path.name}: {e}")
     except Exception as e:
         print(f"  ⚠️  Image processing failed for {orig_path.name}: {e}")
 
@@ -653,21 +660,22 @@ def _deal_data_block(deal: dict) -> str:
     pass, so they're more reliable than the generation model's own reading of
     the reference image."""
     lines = ["OFFICIAL DEAL DATA — verified extraction from the reference image. Use these "
-             "exact values for the validity banner and the savings summary panel; they "
+             "exact values for the date line and the summary rows; they "
              "override anything you read yourself. Do not add any new text containers for them:",
-             f"- Validity/availability: {deal.get('availability') or '(not shown)'}",
              f"- Items with quantities: {deal.get('items') or '(not listed)'}",
-             f"- Original total: {deal.get('price') or '(not shown)'}"]
-    coupons = deal.get("coupons_to_use") or []
-    if coupons:
-        lines.append("- Coupons: " + "; ".join(str(c) for c in coupons))
-    lines.append(f"- FINAL COST to pay: {deal.get('final_cost') or '(not shown)'}")
+             f"- Subtotal: {deal.get('subtotal') or '(not shown)'}",
+             f"- Coupons used: {deal.get('coupons_used') or '$0.00'}",
+             f"- Rewards: {deal.get('rewards') or '$0.00'}",
+             f"- Rebates: {deal.get('rebates') or '$0.00'}",
+             f"- FINAL NET COST: {deal.get('final_net_cost') or '(not shown)'}",
+             f"- VALIDITY DATE: {deal.get('validity_date') or '(not shown)'} — use this exact "
+             f"date/range for the validity banner; omit the banner entirely if '(not shown)'"]
     return "\n" + "\n".join(lines)
 
 
 def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None) -> int:
     """AI deal-infographic stage — turns each single-deal image into a
-    branded coupon-deal infographic via KIE (generate.py, nano-banana-2),
+    branded coupon-deal infographic via KIE (backend: constants.AI_IMAGE_BACKEND),
     replacing the original in <brand-slug>/deals/images/.
 
     Only images with exactly ONE extracted deal (analysis_status "success")
@@ -765,7 +773,7 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
             deal = (entry.get("deals") or [{}])[0]
             image_prompt = prompt + _deal_data_block(deal if isinstance(deal, dict) else {})
             public_url = generate.upload_image(str(img_path))
-            kie_vision.rate_limiter.acquire()
+            rate_limiter.acquire()
             image_urls = [template_url, public_url] if template_url else public_url
             task_id = generate.create_task(image_urls, prompt=image_prompt)
             result_url = generate.poll_task(task_id)

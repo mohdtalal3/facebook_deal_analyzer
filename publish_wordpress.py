@@ -93,11 +93,11 @@ def slugify(text: str) -> str:
 
 
 def price_line_html(deal: dict) -> str:
-    """The deal's price line: FINAL price (red), preceded by the ORIGINAL
-    price struck through when known. Original unknown → final price only;
+    """The deal's price line: FINAL NET COST (red), preceded by the SUBTOTAL
+    struck through when known. Subtotal unknown → final cost only;
     neither → empty string."""
-    original = (deal.get("price") or "").strip()
-    final = (deal.get("final_cost") or "").strip()
+    original = (deal.get("subtotal") or "").strip()
+    final = (deal.get("final_net_cost") or "").strip()
     if original and final and original != final:
         return (f'<s style="color:#777;">{escape(original)}</s> '
                 f'<span style="color:#d40000;font-weight:600;">{escape(final)}</span>')
@@ -109,7 +109,7 @@ def price_line_html(deal: dict) -> str:
 
 def _bullets_html(values, ordered: bool = False) -> str:
     """Render a deal field as bullet points. Accepts a list (the usual deal
-    shape for coupons_to_use/strategy) or a string (split on ; and newlines —
+    shape for items/strategy) or a string (split on ; and newlines —
     the items field's usual shape). Empty/None → empty string."""
     if isinstance(values, str):
         parts = [p.strip() for p in values.replace("\n", ";").split(";") if p.strip()]
@@ -161,11 +161,11 @@ def make_deal_expand_button(item_index: int) -> str:
 
 def render_deal_html(item_index: int, deal: dict, img_url: str,
                      defer_image: bool = False) -> str:
-    """Render one deal item: "N) Deal Name" + price line (original struck
-    through when known, final in red), the image, the summary, and a
-    "Show more" expander revealing the full details under headings — Sale,
-    Items, Coupons to Use, What You Get, Availability, Pro Tip, Strategy —
-    with items/coupons as bullets and strategy as numbered steps.
+    """Render one deal item: "N) Deal Name" + price line (subtotal struck
+    through when known, final net cost in red), the image, the summary, and a
+    "Show more" expander revealing the full details under headings —
+    Items, Coupons Used, Rewards, Rebates, Strategy — with items as bullets
+    and strategy as numbered steps.
     With `defer_image` the image URL goes into data-src for lazy loading
     (hidden show-more items)."""
     name = (deal.get("name") or f"Deal #{item_index}").strip()
@@ -194,12 +194,12 @@ def render_deal_html(item_index: int, deal: dict, img_url: str,
         html += f'<div class="finds-item-desc" style="{_SUMMARY_STYLE}">{escape(summary)}</div>'
 
     details = (
-        _section("Sale", _paragraph_html(deal.get("sale")))
-        + _section("Items", _bullets_html(deal.get("items")))
-        + _section("Coupons to Use", _bullets_html(deal.get("coupons_to_use")))
-        + _section("What You Get", _paragraph_html(deal.get("receive")))
-        + _section("Availability", _paragraph_html(deal.get("availability")))
-        + _section("Pro Tip", _paragraph_html(deal.get("pro_tip")))
+        _section("Items", _bullets_html(deal.get("items")))
+        + _section("Subtotal", _paragraph_html(deal.get("subtotal")))
+        + _section("Coupons Used", _paragraph_html(deal.get("coupons_used")))
+        + _section("Rewards", _paragraph_html(deal.get("rewards")))
+        + _section("Rebates", _paragraph_html(deal.get("rebates")))
+        + _section("Final Net Cost", _paragraph_html(deal.get("final_net_cost")))
         + _section("Strategy", _bullets_html(deal.get("strategy"), ordered=True))
     )
     if details:
@@ -376,7 +376,7 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
             source_url = None
         if source_url:
             uploaded.append((deal, source_url))
-            final = (deal.get("final_cost") or "").strip()
+            final = (deal.get("final_net_cost") or "").strip()
             print(f"  [{i}] ✅ Uploaded '{name}'" + (f" ({final})" if final else ""))
 
     if not uploaded:

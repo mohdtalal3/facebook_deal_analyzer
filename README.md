@@ -44,7 +44,9 @@ facebook-image-analyzer/
 ├── fb_client.py            # Wrapper around the vendored facebook/ scraper library
 ├── run_facebook.py         # The pipeline itself — fetch → comments → images → process → analyze → save
 ├── image_pipeline.py       # Grayscale + JPEG compression to <= 200KB
-├── kie_vision.py           # KIE image upload + GPT-5.6 Luna product extraction (+ rate limiter, standalone CLI)
+├── analysis.py             # OpenAI GPT-6 Luna coupon-deal extraction (standalone CLI)
+├── generate.py             # KIE image upload + nano-banana-2 AI infographic generation
+├── kie_ratelimit.py        # Shared KIE account-wide rate limiter (generation path)
 ├── zip_export.py           # On-demand per-job ZIP export
 │
 ├── facebook/                # Vendored Facebook scraper library (separate git repo)
@@ -152,10 +154,10 @@ MAX_IMAGES_PER_POST = 2      # cap images actually downloaded+analyzed per post
 
 `MAX_IMAGES_PER_POST` is enforced at fetch time (the scraper stops downloading once the cap is hit), not by downloading everything and discarding the extras.
 
-You can also test the KIE integration directly, without running a full job:
+You can also test the OpenAI analysis directly, without running a full job:
 
 ```bash
-python3 kie_vision.py /path/to/image.jpg
+python3 analysis.py /path/to/image.jpg "DOLLAR GENERAL"
 ```
 
 ---

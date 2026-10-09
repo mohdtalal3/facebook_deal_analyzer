@@ -4,14 +4,14 @@ Central place for tunable pipeline constants and testing toggles.
 
 Actual secrets (API keys, tokens) stay in .env — this file is for behavior
 knobs that used to be scattered across individual modules. Flip these
-instead of hunting through run_facebook.py / kie_vision.py / etc.
+instead of hunting through run_facebook.py / analysis.py / etc.
 """
 
 # ── run_facebook.py pipeline toggles ──
 FETCH_COMMENTS = False                  # skip comment scraping — not needed right now
-ANALYZE_IMAGES = True          # run the KIE upload+analyze workflow at all —
+ANALYZE_IMAGES = True          # run the OpenAI deal-analysis workflow at all —
                                  # when False, images are still downloaded/processed
-                                 # but never sent to KIE (analysis_status: "skipped")
+                                 # but never analyzed (analysis_status: "skipped")
 MAX_IMAGES_PER_POST = None              # cap images downloaded/processed/analyzed per post —
                                  # None = no limit (all images; a 50-image hard safety cap
                                  # still applies inside the album walk), or a number to cap
@@ -32,27 +32,25 @@ GENERATE_AI_IMAGES = True                  # send each single-deal image to KIE 
                                 # multiple deals). When False, the original image is kept as-is.
                                 # The prompt is DEAL_INFOGRAPHIC_PROMPT below with {brand_name}
                                 # substituted; the workspace image_prompt config is no longer used.
-DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand name} using the attached image(s) and the OFFICIAL DEAL DATA listed at the end. Follow the template's layout: brand banner at top, date pill below it, product photo area, one card per coupon, savings summary panel at the bottom.
+DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand name} using the attached image(s) and the OFFICIAL DEAL DATA listed at the end. Follow the template's layout: brand logo at top, validity date line below it, product photo area on a clean white background, then the deal summary rows — Items Grabbed, Subtotal, Coupons Used, Reward, Rebates, Final Net Cost.
 
 {inputs_block}
 
 TASK
-1. Product photo: take the main product photo from the deal reference exactly as-is (all products together as one scene), remove its background, and place it on a clean white background in the product area. Do not crop products into individual slots and do not redraw them.
-2. Coupons: place every Digital Coupon panel from the deal reference AS-IS — each coupon is ONE complete card (its image and text together), exactly as it appears in the reference. Do not redesign, re-type, split, or add coupons. The number of coupon cards must match the reference.
-3. Savings summary: fill the summary panel using ONLY the OFFICIAL DEAL DATA below — every product with its price, then TOTAL, COUPON SAVINGS, and the final PAY amount.
-4. Date: if the OFFICIAL DEAL DATA includes a date, show it in the date pill. If there is no date, leave the date pill out of the infographic entirely.
+1. Product photo: take the main product photo from the deal reference exactly as-is (all products together as one scene), remove its background along with any hands, people, or surrounding objects, and place it on a clean white background in the product area. Do not crop products into individual slots and do not redraw them.
+2. Summary rows: fill each row's value using ONLY the OFFICIAL DEAL DATA below — Items Grabbed (the items with quantities), Subtotal, Coupons Used (the total money value, "$0.00" when none), Reward ("$0.00" when none), Rebates ("$0.00" when none), and Final Net Cost.
+3. Date: if a validity date is visible in the deal reference, show it on the date line below the logo. If there is no date, leave the date line out of the infographic entirely.
 
 STRICT RULE — NOTHING INVENTED
-Take EVERYTHING from the deal reference image. Never create, add, or assume anything by yourself:
-- Do NOT add any Digital Coupon panel that is not visible in the deal reference — not even one that "would fit" the deal. If the reference shows no coupons, the infographic has no coupon cards.
-- Do NOT add any product, price, item, brand, or offer that is not visible in the deal reference.
+Take EVERYTHING from the deal reference image and the OFFICIAL DEAL DATA. Never create, add, or assume anything by yourself:
+- Do NOT add any product, price, item, brand, coupon, reward, or rebate that is not visible in the deal reference or present in the OFFICIAL DEAL DATA.
 - Do NOT invent or fill in missing coupon values, terms, sizes, or dates — if something is not readable in the reference, omit it.
-- The OFFICIAL DEAL DATA may only be used for the savings summary and the date pill — never as a source for new coupon panels or products.
+- The OFFICIAL DEAL DATA is the only source for the summary row values and the date line — never add new text containers beyond the template's structure.
 
 RULES
 - Never reproduce any watermark, signature, handwriting, creator name, or social-media handle from either image.
-- Do not draw placeholder frames, dashed boxes, or slot borders in the finished infographic — the template's dashed areas only mark where content goes.
-- No extra decorations, starbursts, or text beyond the template structure and the summary.
+- Do not draw placeholder frames, dashed boxes, or slot borders in the finished infographic — the template's empty areas only mark where content goes.
+- No extra decorations, starbursts, or text beyond the template structure.
 - Bold readable text, clean white background, consistent spacing and alignment."""
 
 # LAYOUT TEMPLATE — REQUIRED, one per brand, for visual consistency and
@@ -85,13 +83,16 @@ AI_IMAGE_COMPARE = False                # when True, the output/published image 
                                 # the AI-generated image on TOP and the ORIGINAL below it, each
                                 # labeled ("AI GENERATED" / "ORIGINAL") so they're easy to compare.
                                 # Flip off for production publishing (clean AI image only).
+AI_IMAGE_BACKEND = "gpt"                # KIE image-generation model used by run_facebook.py:
+                                # "gpt" = gpt-image-2.5 Sunburst (gpt_generate.py, input_urls)
+                                # "kie" = nano-banana-2 (generate.py, image_input)
 
 # ── image_pipeline.py ──
 MAX_PROCESSED_BYTES = 204800          # 200 KB cap for processed (grayscale) images
 MIN_QUALITY = 20                          # floor for JPEG quality before we start downscaling
 MIN_SCALE = 0.25                          # floor for resolution downscale factor
 
-# ── kie_vision.py rate limiter ──
+# ── kie_ratelimit.py (KIE image-generation path) ──
 KIE_MAX_REQUESTS_PER_WINDOW = 18          # stay under KIE's ~20 requests/10s account cap
 KIE_RATE_WINDOW_SECONDS = 10
 
