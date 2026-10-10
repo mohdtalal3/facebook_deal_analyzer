@@ -92,6 +92,14 @@ def slugify(text: str) -> str:
     return text.lower().replace(" ", "-").replace("&", "and").replace("/", "-").replace("--", "-")
 
 
+def normalize_deal_name(name: str) -> str:
+    """Normalize a deal title for duplicate detection: lowercase, punctuation
+    stripped, whitespace collapsed — so "Dove Deodorant Deal!" and
+    "dove  deodorant  deal" dedup to the same key."""
+    import re
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", "", (name or "").lower())).strip()
+
+
 def price_line_html(deal: dict) -> str:
     """The deal's price line: FINAL NET COST (red), preceded by the SUBTOTAL
     struck through when known. Subtotal unknown → final cost only;
@@ -350,6 +358,7 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
     print(f"\n📤 Uploading {len(images)} image(s) to {target['site_name']}...")
     uploaded: list[tuple] = []
     skipped = 0
+    seen_deal_names: set[str] = set()
     for i, img_path in enumerate(images, start=1):
         entry = analysis.get(img_path.name) or {}
         deals = entry.get("deals") or []
@@ -364,6 +373,14 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
             continue
         deal = deals[0]
         name = (deal.get("name") or img_path.stem).strip()
+        # Title-based dedup: the same deal photographed/posted more than once
+        # must publish only once (first occurrence wins).
+        name_key = normalize_deal_name(name)
+        if name_key in seen_deal_names:
+            print(f"  [{i}] ⏭️  {img_path.name} — duplicate deal '{name}', skipping")
+            skipped += 1
+            continue
+        seen_deal_names.add(name_key)
         media_id = publisher.upload_image(img_path, title=name)
         if not media_id:
             print(f"  [{i}] ⚠️  Upload failed for {img_path.name} — skipping")

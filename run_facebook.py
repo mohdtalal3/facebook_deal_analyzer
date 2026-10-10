@@ -55,6 +55,7 @@ import generate
 import gpt_generate
 from image_pipeline import compress_under_limit
 from kie_ratelimit import rate_limiter
+import publish_wordpress
 from publish_wordpress import publish_brand
 from data_store import load_fb_auth
 from constants import (
@@ -730,12 +731,18 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
 
     eligible: dict = {}
     skipped: dict[str, int] = {}
+    seen_deal_names: set[str] = set()
     for filename, entry in analysis.items():
         # Key off the deal count (what analysis_status is derived from) so
         # entries written before the status field existed still qualify.
         deal_count = len(entry.get("deals") or [])
-        if deal_count == 1 and (images_dir / filename).exists():
+        name_key = (publish_wordpress.normalize_deal_name(
+            (entry["deals"][0].get("name") or "")) if deal_count == 1 else "")
+        if deal_count == 1 and (images_dir / filename).exists() and name_key not in seen_deal_names:
             eligible[filename] = entry
+            seen_deal_names.add(name_key)
+        elif deal_count == 1 and name_key in seen_deal_names:
+            skipped["duplicate_deal"] = skipped.get("duplicate_deal", 0) + 1
         else:
             label = (entry.get("analysis_status")
                      or ("multiple_deals" if deal_count > 1 else "no_deal"))

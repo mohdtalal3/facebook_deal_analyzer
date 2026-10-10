@@ -38,14 +38,14 @@ DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand n
 
 TASK
 1. Product photo: take the main product photo from the deal reference exactly as-is (all products together as one scene), remove its background along with any hands, people, or surrounding objects, and place it on a clean white background in the product area. Do not crop products into individual slots and do not redraw them.
-2. Summary rows: fill each row's value using ONLY the OFFICIAL DEAL DATA below — Items Grabbed (the items with quantities), Subtotal, Coupons Used (the total money value, "$0.00" when none), Reward ("$0.00" when none), Rebates ("$0.00" when none), and Final Net Cost.
+2. Summary rows: fill each row's value using ONLY the OFFICIAL DEAL DATA below — Items Grabbed (the items with quantities), Subtotal, Coupons Used (the total money value, "$0.00" when none), Reward ("$0.00" when none), Rebates ("$0.00" when none), and Final Net Cost. EVERY row must display a concrete value — never leave a row blank and never render a dash, em-dash, or placeholder in place of a value. Use the row's OFFICIAL DEAL DATA value; when it says "(not shown)", derive it arithmetically from the official items' prices where possible (e.g. Subtotal = the sum of the item prices, Final Net Cost = subtotal minus coupons/rewards/rebates); only when it truly cannot be determined, render "N/A".
 3. Date: if a validity date is visible in the deal reference, show it on the date line below the logo. If there is no date, leave the date line out of the infographic entirely.
 
 STRICT RULE — NOTHING INVENTED
 Take EVERYTHING from the deal reference image and the OFFICIAL DEAL DATA. Never create, add, or assume anything by yourself:
 - Do NOT add any product, price, item, brand, coupon, reward, or rebate that is not visible in the deal reference or present in the OFFICIAL DEAL DATA.
 - Do NOT invent or fill in missing coupon values, terms, sizes, or dates — if something is not readable in the reference, omit it.
-- The OFFICIAL DEAL DATA is the only source for the summary row values and the date line — never add new text containers beyond the template's structure.
+- The OFFICIAL DEAL DATA is the only source for the summary row values and the date line — never add new text containers beyond the template's structure. Deriving Subtotal or Final Net Cost arithmetically from the official items' prices is allowed (it is math, not invention); inventing a missing price or value is not.
 
 RULES
 - Never reproduce any watermark, signature, handwriting, creator name, or social-media handle from either image.
