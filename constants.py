@@ -24,12 +24,13 @@ PAGE_SCAN_WORKERS = 5                 # parallel page/group URL discovery thread
                                 # overlaps the long pagination waits)
 
 # ── run_facebook.py publish-prep: AI deal infographics (Phase 3, before publishing) ──
-GENERATE_AI_IMAGES = True                  # send each single-deal image to KIE (nano-banana-2 via generate.py)
-                                # to create a new AI-generated coupon-deal infographic; the AI image
-                                # replaces the original. Only images with exactly one deal
-                                # (analysis_status "success") are generated — no_deal / multiple_deals /
-                                # failed / skipped entries are skipped (one image can't carry
-                                # multiple deals). When False, the original image is kept as-is.
+GENERATE_AI_IMAGES = True                  # send each single-deal image to KIE (model chosen by
+                                # AI_IMAGE_BACKEND below) to create a new AI-generated coupon-deal
+                                # infographic; the AI image replaces the original. Only images with
+                                # exactly one deal (analysis_status "success") are generated —
+                                # no_deal / multiple_deals / failed / skipped entries are skipped
+                                # (one image can't carry multiple deals). When False, the original
+                                # image is kept as-is.
                                 # The prompt is DEAL_INFOGRAPHIC_PROMPT below with {brand_name}
                                 # substituted; the workspace image_prompt config is no longer used.
 DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand name} using the attached image(s) and the OFFICIAL DEAL DATA listed at the end. Follow the template's layout: brand logo at top, validity date line below it, product photo area on a clean white background, then the deal summary rows — Items Grabbed, Subtotal, Coupons Used, Reward, Rebates, Final Net Cost.
@@ -38,8 +39,8 @@ DEAL_INFOGRAPHIC_PROMPT = """Create a clean coupon-deal infographic for {brand n
 
 TASK
 1. Product photo: take the main product photo from the deal reference exactly as-is (all products together as one scene), remove its background along with any hands, people, or surrounding objects, and place it on a clean white background in the product area. Do not crop products into individual slots and do not redraw them.
-2. Summary rows: fill each row's value using ONLY the OFFICIAL DEAL DATA below — Items Grabbed (the items with quantities), Subtotal, Coupons Used (the total money value, "$0.00" when none), Reward ("$0.00" when none), Rebates ("$0.00" when none), and Final Net Cost. EVERY row must display a concrete value — never leave a row blank and never render a dash, em-dash, or placeholder in place of a value. Use the row's OFFICIAL DEAL DATA value; when it says "(not shown)", derive it arithmetically from the official items' prices where possible (e.g. Subtotal = the sum of the item prices, Final Net Cost = subtotal minus coupons/rewards/rebates); only when it truly cannot be determined, render "N/A".
-3. Date: if a validity date is visible in the deal reference, show it on the date line below the logo. If there is no date, leave the date line out of the infographic entirely.
+2. Summary rows: fill each row's value using ONLY the OFFICIAL DEAL DATA below — Items Grabbed (one bullet line per item, exactly as listed in the official data, with quantities and prices), Subtotal, Coupons Used (the total money value, "$0.00" when none), Reward ("$0.00" when none), Rebates ("$0.00" when none), and Final Net Cost. EVERY row must display a concrete value — never leave a row blank and never render a dash, em-dash, or placeholder in place of a value. Use the row's OFFICIAL DEAL DATA value; when it says "(not shown)", derive it arithmetically from the official items' prices where possible (e.g. Subtotal = the sum of the item prices, Final Net Cost = subtotal minus coupons/rewards/rebates); only when it truly cannot be determined, render "N/A".
+3. Date: the validity date comes ONLY from the OFFICIAL DEAL DATA's "VALIDITY DATE" line — render it exactly as given, word for word, on the date line below the logo (do not re-read or rephrase it from the deal reference). If it says "(not shown)", leave the date line out of the infographic entirely.
 
 STRICT RULE — NOTHING INVENTED
 Take EVERYTHING from the deal reference image and the OFFICIAL DEAL DATA. Never create, add, or assume anything by yourself:
