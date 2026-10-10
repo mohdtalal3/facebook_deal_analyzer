@@ -619,7 +619,9 @@ def fetch_posts(limit=10, min_comments=0, batch_size=10, on_batch_complete=None,
         batch_size: Number of posts to fetch before calling on_batch_complete callback
         on_batch_complete: Optional callback function(batch_posts, total_so_far, limit) called after each batch
         start_date: Optional timezone-aware datetime — posts older than this are excluded
+            (also sent to Facebook server-side as afterTime epoch seconds)
         end_date: Optional timezone-aware datetime — posts newer than this are excluded
+            (also sent to Facebook server-side as beforeTime epoch seconds)
         save_root: Base directory posts/media are saved under (default "page_post")
         max_pages: Safety cap on GraphQL pagination requests
         max_images_per_post: Caps how many photos are actually downloaded per post (None = no limit)
@@ -651,6 +653,12 @@ def fetch_posts(limit=10, min_comments=0, batch_size=10, on_batch_complete=None,
     cursor = None
     page_num = 1  # Track page number for saving cleaned data
     consecutive_too_old = 0
+    # Server-side date filter (same trick as the standalone scraper's page_posts):
+    # Facebook's page-feed GraphQL accepts epoch-seconds afterTime/beforeTime, so
+    # out-of-window posts are never returned in the first place. The client-side
+    # checks further down stay as a safety net for boundary posts.
+    after_time = int(start_date.timestamp()) if start_date else None
+    before_time = int(end_date.timestamp()) if end_date else None
 
     if min_comments > 0:
         print(f"📊 Filtering posts with at least {min_comments} comments")
@@ -663,8 +671,8 @@ def fetch_posts(limit=10, min_comments=0, batch_size=10, on_batch_complete=None,
 
     while len(all_posts) < limit and page_num <= max_pages:
         variables = {
-            "afterTime": None,
-            "beforeTime": None,
+            "afterTime": after_time,
+            "beforeTime": before_time,
             "count": 3,
             "cursor": cursor,
             "feedLocation": "TIMELINE",
