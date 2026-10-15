@@ -66,6 +66,8 @@ _HEADING_STYLE = ("max-width:400px;margin:12px auto 4px;text-align:left;font-siz
                   "font-weight:700;color:#222;")
 _UL_STYLE = ("max-width:400px;margin:4px auto 8px;text-align:left;font-size:14px;"
              "line-height:1.5;color:#333;padding-left:22px;")
+_TOGGLE_STYLE = ("color:#d40000;font-size:0.9em;cursor:pointer;text-decoration:underline;"
+                 "font-weight:600;text-align:center;list-style:none;")
 
 
 def load_deals(deals_dir: Path) -> tuple[list[Path], dict]:
@@ -147,35 +149,13 @@ def _section(heading: str, body_html: str) -> str:
     return f'<h4 style="{_HEADING_STYLE}">{escape(heading)}</h4>{body_html}'
 
 
-def make_deal_expand_button(item_index: int) -> str:
-    """Per-item "Show more" toggle for the hidden details div (inline onclick,
-    no external JS needed)."""
-    onclick = (
-        f"var d=document.getElementById('deal-details-{item_index}');"
-        "if(d){"
-        "if(d.style.display==='none'){"
-        "d.style.display='block';"
-        "this.textContent='Show less';"
-        "}else{"
-        "d.style.display='none';"
-        "this.textContent='Show more';"
-        "}"
-        "}"
-    )
-    return (f'<a href="javascript:void(0)" onclick="{onclick}" '
-            f'style="color:#d40000;font-size:0.9em;cursor:pointer;'
-            f'text-decoration:underline;font-weight:600;">Show more</a>')
-
-
-def render_deal_html(item_index: int, deal: dict, img_url: str,
-                     defer_image: bool = False) -> str:
+def render_deal_html(item_index: int, deal: dict, img_url: str) -> str:
     """Render one deal item: "N) Deal Name" + price line (subtotal struck
     through when known, final net cost in red), the image, the summary, and a
-    "Show more" expander revealing the full details under headings —
+    native <details> expander revealing the full details under headings —
     Items, Coupons Used, Rewards, Rebates, Strategy — with items as bullets
-    and strategy as numbered steps.
-    With `defer_image` the image URL goes into data-src for lazy loading
-    (hidden show-more items)."""
+    and strategy as numbered steps. <details>/<summary> needs no JavaScript,
+    so WordPress's HTML sanitizing (which strips onclick/href) can't break it."""
     name = (deal.get("name") or f"Deal #{item_index}").strip()
     title_safe = escape(name)
     title_html = f"{item_index}) {title_safe}"
@@ -183,8 +163,6 @@ def render_deal_html(item_index: int, deal: dict, img_url: str,
     if price_html:
         title_html += f' — {price_html}'
 
-    img_attr = "data-src" if defer_image else "src"
-    lazy_class = "lazy-load" if defer_image else ""
     html = '    <div class="finds-item">'
     html += '<div class="finds-item-header">'
     html += f'<span class="finds-item-title">{title_html}</span>'
@@ -192,8 +170,8 @@ def render_deal_html(item_index: int, deal: dict, img_url: str,
     html += (
         f'<div style="text-align: center; margin-top: 10px; padding: 10px;">'
         f'<div style="position:relative;display:inline-block;max-width:400px;width:100%;">'
-        f'<img {img_attr}="{img_url}" alt="{title_safe}" '
-        f'style="max-width: 400px; width: 100%; height: auto; display: block;" class="{lazy_class}" />'
+        f'<img src="{img_url}" alt="{title_safe}" '
+        f'style="max-width: 400px; width: 100%; height: auto; display: block;" />'
         f'</div></div>'
     )
 
@@ -211,54 +189,19 @@ def render_deal_html(item_index: int, deal: dict, img_url: str,
         + _section("Strategy", _bullets_html(deal.get("strategy"), ordered=True))
     )
     if details:
-        html += (f'<div style="text-align:center;margin-top:6px;">'
-                 f'{make_deal_expand_button(item_index)}</div>')
-        html += (f'<div id="deal-details-{item_index}" style="display:none;'
-                 f'margin-top:4px;">{details}</div>')
+        html += (f'<details style="margin-top:6px;">'
+                 f'<summary style="{_TOGGLE_STYLE}">Show more</summary>'
+                 f'<div style="margin-top:4px;">{details}</div>'
+                 f'</details>')
     html += '</div>'
     return html
-
-
-def make_show_more_button(anchor: str, label: str, hidden_count: int) -> str:
-    """Generate a show more/less button with inline onclick (no external JS
-    needed) — hidden items' images are lazy-loaded (data-src) and swapped
-    into src when the section is expanded."""
-    safe_label = label.replace("'", "\\'")
-    onclick = (
-        "event.stopPropagation();"
-        f"var d=document.getElementById('finds-more-{anchor}');"
-        "if(d){"
-        "if(d.style.display==='none'){"
-        "d.style.display='block';"
-        "this.setAttribute('aria-expanded','true');"
-        "this.textContent='Show less';"
-        "var imgs=d.querySelectorAll('img[data-src]');"
-        "for(var i=0;i<imgs.length;i++){"
-        "if(imgs[i].getAttribute('data-src')){"
-        "imgs[i].setAttribute('src',imgs[i].getAttribute('data-src'));"
-        "imgs[i].removeAttribute('data-src');"
-        "}"
-        "}"
-        "}else{"
-        "d.style.display='none';"
-        "this.setAttribute('aria-expanded','false');"
-        "var n=d.querySelectorAll('.finds-item').length;"
-        f"this.textContent='Show more in {safe_label} ('+n+' more)';"
-        "}"
-        "}"
-    )
-    return (
-        f'\n  <button class="aos-show-more" data-target="{anchor}" data-label="{label}" '
-        f'aria-expanded="false" onclick="{onclick}">'
-        f'Show more in {label} ({hidden_count} more)</button>'
-    )
 
 
 def build_deals_page_html(items: list[tuple], brand: str) -> str:
     """Build the full WordPress page HTML for the brand's deals page.
     `items` is [(deal dict, img_url)] in publish order. One "Deals" section —
-    the first ITEMS_PER_SECTION_LIMIT deals visible, the rest in a hidden
-    show-more block (lazy-loaded images)."""
+    the first ITEMS_PER_SECTION_LIMIT deals visible, the rest inside a native
+    <details> show-more block (no JavaScript, survives WP HTML sanitizing)."""
     total = len(items)
     html = '<div id="top" class="aos-finds">\n'
     html += f'  <h3 style="text-align: center;">{escape(brand)} Deals</h3>\n\n'
@@ -270,19 +213,20 @@ def build_deals_page_html(items: list[tuple], brand: str) -> str:
 
     item_index = 1
     for deal, img_url in visible_items:
-        html += "\n" + render_deal_html(item_index, deal, img_url, defer_image=False)
+        html += "\n" + render_deal_html(item_index, deal, img_url)
         item_index += 1
 
     if hidden_items:
         html += '\n  </div>'
-        html += '\n  <div class="aos-more" id="finds-more-deals" style="display:none;">'
-        html += '\n    <div class="aos-category-items">'
+        html += ('\n  <details style="margin-top:10px;">'
+                 f'\n    <summary style="{_TOGGLE_STYLE}">'
+                 f'Show more in Deals ({len(hidden_items)} more)</summary>'
+                 '\n    <div class="aos-category-items" style="margin-top:10px;">')
         for deal, img_url in hidden_items:
-            html += "\n" + render_deal_html(item_index, deal, img_url, defer_image=True)
+            html += "\n" + render_deal_html(item_index, deal, img_url)
             item_index += 1
         html += '\n    </div>'
-        html += '\n  </div>'
-        html += make_show_more_button("deals", "Deals", len(hidden_items))
+        html += '\n  </details>'
     else:
         html += '\n  </div>'
 
