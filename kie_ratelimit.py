@@ -7,8 +7,8 @@ run_facebook.py subprocess), so a thread-safe in-process limiter is enough —
 the AI-generation threads all draw from the same process-wide window.
 
 Deal analysis no longer hits KIE (it runs through OpenAI — see analysis.py);
-this limiter now only paces the KIE image-generation path (generate.py
-uploads + task creation).
+this limiter now only paces the KIE task-creation path (createTask — the
+only call KIE's ~20-per-10s account cap counts; uploads are unpaced).
 """
 
 import threading

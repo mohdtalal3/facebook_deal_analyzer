@@ -46,13 +46,14 @@ def _kie_upload(file_path: str, upload_path: str = "screenshots", mime: str = "i
     """Upload a local image to KIE's file-stream-upload endpoint and return
     its public URL.
 
-    Paced through the shared account-wide rate limiter (kie_ratelimit.py)
-    and retried up to max_retries times with backoff — a transient upload
+    NOT paced through the rate limiter — KIE's ~20-requests/10s account cap
+    counts only generation (createTask) requests; a 50-upload concurrent
+    burst was verified to pass with zero 429s (test_upload_burst.py).
+    Retried up to max_retries times with backoff — a transient upload
     failure no longer fails the image outright."""
     last_error = None
     for attempt in range(1, max_retries + 1):
         try:
-            rate_limiter.acquire()
             with open(file_path, "rb") as f:
                 response = requests.post(
                     UPLOAD_URL,
@@ -84,8 +85,8 @@ def upload_image(file_path: str) -> str:
 
     The file is first copied to a temp file with a random UUID name so the
     uploaded filename is never the same twice, then that copy is uploaded
-    and removed (KIE file-stream-upload, paced through the shared
-    account-wide rate limiter)."""
+    and removed (KIE file-stream-upload — unpaced; only createTask counts
+    against KIE's account rate cap)."""
     src = Path(file_path)
     tmp = src.with_name(f"{uuid.uuid4().hex}{src.suffix or '.jpg'}")
     try:

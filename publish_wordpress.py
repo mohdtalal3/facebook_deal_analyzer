@@ -305,6 +305,10 @@ def publish_brand(parent_job_id: str, brand: str, brand_slug: str,
     seen_deal_names: set[str] = set()
     for i, img_path in enumerate(images, start=1):
         entry = analysis.get(img_path.name) or {}
+        if entry.get("ai_failed"):
+            print(f"  [{i}] ⏭️  {img_path.name} — AI image failed, skipping")
+            skipped += 1
+            continue
         deals = entry.get("deals") or []
         # Exactly one deal publishes — keyed off the deal count (what
         # analysis_status is derived from) so entries written before the

@@ -690,7 +690,8 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
     reference image itself stays the visual source of truth (products and
     coupon panels are placed as-is). Toggled by constants.GENERATE_AI_IMAGES.
     Returns the number of images regenerated. Never raises per image — a
-    failure just keeps the original."""
+    failure marks the entry (ai_failed) and the deal is skipped entirely at
+    publish time (no original fallback)."""
     if not GENERATE_AI_IMAGES:
         return 0
     if not brand_slug:
@@ -794,10 +795,12 @@ def generate_deal_infographics(job_dir: Path, brand: str, brand_slug: str | None
                     print(f"  🔀 {filename} — comparison sheet (AI top / original below)")
             shutil.move(str(result_path), str(img_path))
             entry["ai_image"] = True
+            entry.pop("ai_failed", None)
             print(f"  🎨 {filename} — deal infographic generated")
             return True
         except Exception as e:
-            print(f"  ⚠️  AI infographic generation failed for {filename}: {e} — keeping the original")
+            entry["ai_failed"] = True
+            print(f"  ⚠️  AI infographic generation failed for {filename}: {e} — deal will be skipped at publish")
             return False
 
     with ThreadPoolExecutor(max_workers=AI_IMAGE_WORKERS) as executor:
