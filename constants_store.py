@@ -46,12 +46,8 @@ EDITABLE: dict[str, tuple] = {
                          "Publish a comparison sheet (AI on top, original below, labeled) instead of the clean AI image"),
 
     # ── Image processing ──
-    "MAX_PROCESSED_BYTES": (int, "Image processing", "Processed image cap (bytes)",
-                            "Size cap for processed (grayscale) images"),
-    "MIN_QUALITY": (int, "Image processing", "Min JPEG quality",
-                    "Floor for JPEG quality before downscaling starts"),
-    "MIN_SCALE": (float, "Image processing", "Min scale factor",
-                  "Floor for resolution downscale factor"),
+    "ANALYSIS_MAX_SIDE": (int, "Image processing", "Analysis image max side (px)",
+                          "Longest-side pixel cap for images sent to OpenAI analysis"),
 
     # ── KIE ──
     "KIE_MAX_REQUESTS_PER_WINDOW": (int, "KIE", "KIE requests per window",

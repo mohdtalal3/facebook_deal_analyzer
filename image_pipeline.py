@@ -3,17 +3,22 @@
 Image processing for the Facebook product-analysis pipeline.
 
 Every image downloaded from a post gets a processed sibling: grayscale,
-JPEG-compressed down to <= MAX_PROCESSED_BYTES. Originals are never modified.
+resolution-capped (longest side <= ANALYSIS_MAX_SIDE px). Originals are
+never modified.
 """
 
 import os
 from PIL import Image
 
-from constants import MAX_PROCESSED_BYTES, MIN_QUALITY, MIN_SCALE
+from constants import ANALYSIS_MAX_SIDE
 
 
-def process_image(original_path: str, processed_path: str, max_bytes: int = MAX_PROCESSED_BYTES) -> str:
-    """Convert an image to grayscale and compress it under `max_bytes`.
+def process_image(original_path: str, processed_path: str,
+                  max_side: int = ANALYSIS_MAX_SIDE) -> str:
+    """Convert an image to grayscale and cap its resolution (longest side
+    `max_side` px — vision tokens scale with pixel area, not file bytes).
+    No byte-cap compression loop: grayscale + the resolution cap already
+    keep the JPEG small.
 
     Saves the result to `processed_path` (JPEG) and returns that path.
     Raises on unreadable/corrupt input — caller should treat that as a
@@ -24,27 +29,14 @@ def process_image(original_path: str, processed_path: str, max_bytes: int = MAX_
     with Image.open(original_path) as im:
         gray = im.convert("L")
 
-        quality = 85
-        scale = 1.0
-        working = gray
+        if max(gray.size) > max_side:
+            ratio = max_side / max(gray.size)
+            gray = gray.resize(
+                (round(gray.width * ratio), round(gray.height * ratio)),
+                Image.LANCZOS,
+            )
 
-        while True:
-            working.save(processed_path, "JPEG", quality=quality, optimize=True)
-            size = os.path.getsize(processed_path)
-
-            if size <= max_bytes:
-                break
-            if quality > MIN_QUALITY:
-                quality -= 15
-                continue
-            if scale > MIN_SCALE:
-                scale -= 0.15
-                w, h = gray.size
-                new_size = (max(50, int(w * scale)), max(50, int(h * scale)))
-                working = gray.resize(new_size, Image.LANCZOS)
-                continue
-            # Already at minimum quality/scale — accept whatever we have.
-            break
+        gray.save(processed_path, "JPEG", quality=85, optimize=True)
 
     return processed_path
 

@@ -75,7 +75,7 @@ DEAL_INPUTS_BLOCK = """INPUTS
 - IMAGE 1 (layout template): the exact frame to reuse — copy its layout, colors, and styling. Its card count is an example only; match the reference's coupon count.
 - IMAGE 2 (deal reference): the source of truth for the product photo and the coupon panels."""
 
-AI_IMAGE_MAX_BYTES = 512000          # images are compressed under this size before upload to KIE
+AI_IMAGE_MAX_BYTES = 512000          # AI results are compressed under this size after download (uploads go as-is)
                                 # and the AI result is compressed under it before publishing
 AI_IMAGE_WORKERS = 5                    # parallel AI image-generation threads (upload→createTask→poll→download
                                 # per image; the shared KIE rate limiter keeps the total under the
@@ -89,9 +89,8 @@ AI_IMAGE_BACKEND = "gpt"                # KIE image-generation model used by run
                                 # "kie" = nano-banana-2 (generate.py, image_input)
 
 # ── image_pipeline.py ──
-MAX_PROCESSED_BYTES = 204800          # 200 KB cap for processed (grayscale) images
-MIN_QUALITY = 20                          # floor for JPEG quality before we start downscaling
-MIN_SCALE = 0.25                          # floor for resolution downscale factor
+ANALYSIS_MAX_SIDE = 1024                # longest-side px cap before OpenAI analysis —
+                                        # vision tokens scale with pixel area, not file bytes
 
 # ── kie_ratelimit.py (KIE image-generation path) ──
 KIE_MAX_REQUESTS_PER_WINDOW = 18          # stay under KIE's ~20 requests/10s account cap
