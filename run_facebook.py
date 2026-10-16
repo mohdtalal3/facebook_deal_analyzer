@@ -564,26 +564,41 @@ def discover_page_or_group_posts(job_dir: Path, url: str, src_type: str, cookies
     }
 
 
-def _count_publishable_deals(mapping: dict) -> int:
-    """Entries in a mapping that carry exactly ONE deal — the ones the
-    infographic/publish stages actually use (the MAX_DEALS_PER_JOB cap
-    counts these)."""
-    return sum(1 for e in mapping.values()
-               if len(e.get("deals") or []) == 1)
+def _register_publishable_deals(mapping: dict, seen_names: set) -> int:
+    """Register a mapping's single-deal entries in the job-wide dedup set.
+    Returns how many NEW unique deal names were added — the number that
+    consumes the MAX_DEALS_PER_JOB budget. A deal whose name was already
+    registered (posted again in a later post/source) consumes nothing —
+    it would be skipped at publish anyway (first occurrence wins), so
+    counting it would leave the job short of the cap."""
+    new_count = 0
+    for entry in mapping.values():
+        deals = entry.get("deals") or []
+        if len(deals) != 1:
+            continue
+        key = publish_wordpress.normalize_deal_name(deals[0].get("name") or "")
+        if not key or key in seen_names:
+            continue
+        seen_names.add(key)
+        new_count += 1
+    return new_count
 
 
 def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
                                  brand_filter,
                                  brand_name: str,
-                                 deal_budget: int = 0) -> tuple[list[str], dict]:
+                                 deal_budget: int = 0,
+                                 seen_deal_names: set | None = None) -> tuple[list[str], dict]:
     """Processing phase for one discovered page/group source: brand
     re-check, comments, image download/processing/analysis, and
     filter/organize — for every post discover_page_or_group_posts() already
     found.
 
     `deal_budget` is this job's remaining MAX_DEALS_PER_JOB allowance
-    (0 = unlimited) — once this source has produced that many publishable
-    deals, the remaining posts of the source are skipped (early stop)."""
+    (0 = unlimited) and `seen_deal_names` the job-wide unique-deal-name
+    set — once this source has produced that many NEW unique deals, the
+    remaining posts of the source are skipped (early stop). Duplicate
+    deal names don't consume the budget (they publish nothing new)."""
     url = discovered["url"]
     posts = discovered["posts"]
     text_key = discovered["text_key"]
@@ -661,7 +676,8 @@ def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
         )
         written = organize_or_discard(job_dir, staging_root, post_id, text_brand, mapping)
         all_mapping.update(written)
-        source_deal_count += _count_publishable_deals(written)
+        source_deal_count += _register_publishable_deals(
+            written, seen_deal_names if seen_deal_names is not None else set())
         processed_ids.append(post_id)
 
     shutil.rmtree(scratch_root, ignore_errors=True)
@@ -1002,17 +1018,18 @@ def main():
 
     all_processed_ids: list[str] = []
     all_mapping: dict = {}
+    seen_deal_names: set[str] = set()  # job-wide unique publishable deal names — the cap counts these
 
     def _deals_so_far() -> int:
-        return _count_publishable_deals(all_mapping)
+        return len(seen_deal_names)
 
     if MAX_DEALS_PER_JOB:
-        print(f"Deal cap: stopping once {MAX_DEALS_PER_JOB} valid deal(s) have been extracted "
+        print(f"Deal cap: stopping once {MAX_DEALS_PER_JOB} unique valid deal(s) have been extracted "
               f"(0 = unlimited in constants.py).")
 
     for url, post_id in discovered_post_sources:
         if MAX_DEALS_PER_JOB and _deals_so_far() >= MAX_DEALS_PER_JOB:
-            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals) — remaining post URLs skipped")
+            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} unique deals) — remaining post URLs skipped")
             break
         print(f"\nProcessing post: {url}")
         result = _with_source_retries(
@@ -1023,17 +1040,19 @@ def main():
             if processed_id:
                 all_processed_ids.append(processed_id)
                 all_mapping.update(mapping)
+                _register_publishable_deals(mapping, seen_deal_names)
 
     for discovered in discovered_page_group_sources:
         if MAX_DEALS_PER_JOB and _deals_so_far() >= MAX_DEALS_PER_JOB:
-            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals) — remaining sources skipped")
+            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} unique deals) — remaining sources skipped")
             break
         print(f"\nProcessing source: {discovered['url']}  ({len(discovered['posts'])} post(s))")
         budget_left = (MAX_DEALS_PER_JOB - _deals_so_far()) if MAX_DEALS_PER_JOB else 0
         result = _with_source_retries(
             discovered["url"],
             lambda d=discovered, b=budget_left: process_page_or_group_posts(
-                job_dir, d, cookies, brand_filter, args.brand, deal_budget=b))
+                job_dir, d, cookies, brand_filter, args.brand,
+                deal_budget=b, seen_deal_names=seen_deal_names))
         if result:
             ids, mapping = result
             all_processed_ids.extend(ids)

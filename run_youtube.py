@@ -203,16 +203,19 @@ def fetch_transcript_with_retries(video_url: str, output_file: Path) -> bool:
 def extract_video_deals(videos: list[dict], work_dir: Path) -> list[dict]:
     """Transcript + deal extraction per video, NEWEST first (sequential —
     the extraction chains previous_response_id across videos for
-    cross-video dedup). Stops early once MAX_DEALS_PER_JOB valid deals
-    have been extracted — the remaining older videos are never fetched.
-    Returns the flat all-deals array (capped), every deal tagged with its
-    video."""
+    cross-video dedup). Deals are deduped by normalized name AS THEY
+    ARRIVE (first occurrence wins), and the loop stops early only once
+    MAX_DEALS_PER_JOB UNIQUE deals exist — so the cap is the number of
+    deals that actually survive dedup, not the raw extraction count.
+    Returns the flat all-deals array (deduped, capped), every deal tagged
+    with its video."""
     all_deals: list[dict] = []
+    seen_names: set[str] = set()
     previous_response_id = None
 
     for idx, video in enumerate(videos, start=1):
         if MAX_DEALS_PER_JOB and len(all_deals) >= MAX_DEALS_PER_JOB:
-            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals) — "
+            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} unique deals) — "
                   f"stopping early, {len(videos) - idx + 1} older video(s) not processed")
             break
 
@@ -244,12 +247,20 @@ def extract_video_deals(videos: list[dict], work_dir: Path) -> list[dict]:
             continue
 
         video_deals = json.loads((video_dir / "deals.json").read_text(encoding="utf-8"))
+        new_deals = []
         for deal in video_deals:
+            name_key = normalize_deal_name(deal.get("name") or "")
+            if name_key and name_key in seen_names:
+                print(f"  ⏭️  Duplicate deal '{deal.get('name')}' — skipping (first occurrence wins)")
+                continue
+            if name_key:
+                seen_names.add(name_key)
             deal["video_id"] = video_id
             deal["video_url"] = url
             deal["video_title"] = video.get("title") or ""
-        all_deals.extend(video_deals)
-        print(f"  → {len(video_deals)} deal(s) (running total: {len(all_deals)})")
+            new_deals.append(deal)
+        all_deals.extend(new_deals)
+        print(f"  → {len(new_deals)} new deal(s) (unique total: {len(all_deals)})")
 
     if MAX_DEALS_PER_JOB:
         all_deals = all_deals[:MAX_DEALS_PER_JOB]
