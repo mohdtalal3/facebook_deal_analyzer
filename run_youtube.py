@@ -68,33 +68,47 @@ if AI_IMAGE_BACKEND == "gpt":
 def _brand_filter_videos(videos: list[dict], brand: str,
                          relaxed_channel_urls: set[str]) -> list[dict]:
     """Brand text filter — the youtube equivalent of the facebook pipeline's
-    post-text brand filter: a video is only processed when its TITLE +
-    DESCRIPTION detect the workspace's single canonical brand
-    (brand_mapping.detect_single_brand, same keyword variants: #WalmartFinds,
-    wal-mart, wags, ...). Otherwise a multi-store channel (one channel posts
-    CVS, Meijer AND Walgreens videos) would pour every store's deals into
-    one workspace.
+    post-text brand filter: a video is only processed when its TITLE (or,
+    failing that, its DESCRIPTION) names the workspace's brand
+    (brand_mapping, same keyword variants: #WalmartFinds, wal-mart, wags,
+    ...). Otherwise a multi-store channel (one channel posts CVS, Meijer AND
+    Walgreens videos) would pour every store's deals into one workspace.
 
-    Relaxed rule (same as facebook): a channel whose URL contains the brand
-    name IS the brand's own channel — its videos that name no brand in
-    title/description are still accepted. Videos detecting a DIFFERENT
-    brand, and ambiguous (multi-brand) videos, are always rejected."""
+    TITLE-FIRST rule — youtube descriptions routinely mention several stores
+    (channel promos, hashtags like "follow for Walmart AND Sam's Club
+    deals"), so facebook's strict exactly-one-brand rule would wrongly
+    reject a Walmart-titled video whose description also names Sam's Club:
+      1. title names the workspace brand (among any others) → ACCEPT
+      2. title names only other store(s) → REJECT (the video is about them)
+      3. title names no store → accept when the DESCRIPTION names the brand
+      4. nothing anywhere → accept only for relaxed channels (channel URL
+         contains the brand name — it IS the brand's own channel)"""
     kept: list[dict] = []
     for v in videos:
         vid = v["video_id"]
-        text = f"{v.get('title') or ''} {v.get('description') or ''}"
-        detected = brand_mapping.detect_single_brand(text)
-        print(f"  🏷️  Video {vid} brand: {detected or '(none / ambiguous)'} — "
-              f"text: {(v.get('title') or '')[:100]!r}")
-        if detected == brand:
+        title = v.get("title") or ""
+        description = v.get("description") or ""
+        title_brands = brand_mapping.detect_brands(title)
+        desc_brands = brand_mapping.detect_brands(description)
+        print(f"  🏷️  Video {vid} — title brands: {sorted(title_brands) or '(none)'} — "
+              f"text: {title[:100]!r}")
+
+        if brand in title_brands:
             kept.append(v)
-        elif detected is None and v.get("channel_url") in relaxed_channel_urls:
+        elif title_brands:
+            print(f"  🗑️  Skipping video {vid} — title is about "
+                  f"{', '.join(sorted(title_brands))}, not {brand}")
+        elif brand in desc_brands:
+            print(f"  🔗 Brand '{brand}' found in the description (title names no store)")
+            kept.append(v)
+        elif desc_brands:
+            print(f"  🗑️  Skipping video {vid} — description names "
+                  f"{', '.join(sorted(desc_brands))}, not {brand}")
+        elif v.get("channel_url") in relaxed_channel_urls:
             print(f"  🔗 Channel URL matches '{brand}' — no-brand video accepted as {brand}")
             kept.append(v)
-        elif detected is None:
-            print(f"  🗑️  Skipping video {vid} — no single retailer brand detected in title/description")
         else:
-            print(f"  🗑️  Skipping video {vid} — brand '{detected}' does not match this workspace's brand")
+            print(f"  🗑️  Skipping video {vid} — no retailer brand detected in title/description")
     return kept
 
 
