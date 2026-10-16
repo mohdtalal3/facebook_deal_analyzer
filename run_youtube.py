@@ -309,8 +309,10 @@ def _deal_data_block(deal: dict) -> str:
     prose fields (name/summary), which would tempt it to create new text
     containers."""
     lines = ["OFFICIAL DEAL DATA — verified extraction from the video transcript. Use these "
-             "exact values for the date line and the summary rows; they "
+             "exact values for the title banner, the date line and the summary rows; they "
              "override anything you would write yourself. Do not add any new text containers for them:",
+             f"- DEAL NAME: {deal.get('name') or '(not listed)'} — render this exactly in the "
+             f"template's title banner",
              f"- Items with quantities: {deal.get('items') or '(not listed)'}",
              f"- Subtotal: {deal.get('subtotal') or '(not shown)'}",
              f"- Coupons used: {deal.get('coupons_used') or '$0.00'}",
