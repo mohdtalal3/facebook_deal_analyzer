@@ -96,10 +96,13 @@ def upload_image(file_path: str) -> str:
         tmp.unlink(missing_ok=True)
 
 
-def create_task(image_urls, prompt_file: str = None, prompt: str = None) -> str:
+def create_task(image_urls, prompt_file: str = None, prompt: str = None,
+                aspect_ratio: str = "9:16") -> str:
     """Create one nano-banana-2 task. `image_urls` is a single public URL or
     a list of them (up to 14) — e.g. [template_url, deal_image_url] when a
-    layout template is used."""
+    layout template is used. An EMPTY list is text-to-image. `aspect_ratio`
+    defaults to the vertical 9:16 infographic layout; the youtube pipeline's
+    product images pass their own ratio."""
     if isinstance(image_urls, str):
         image_urls = [image_urls]
     payload = {
@@ -108,13 +111,11 @@ def create_task(image_urls, prompt_file: str = None, prompt: str = None) -> str:
             # nano-banana-2: image_input (up to 14 URLs, empty = text-to-image),
             # prompt (max 20000 chars), aspect_ratio (auto or 1:1…21:9),
             # resolution (1K/2K/4K, default 1K), output_format (png/jpg,
-            # default jpg). aspect_ratio is pinned to 9:16 — the vertical
-            # infographic layout (Pinterest/FB/Instagram Stories). Only
-            # prompt/image_input/aspect_ratio are set — resolution and
-            # output_format use the API defaults.
+            # default jpg). Only prompt/image_input/aspect_ratio are set —
+            # resolution and output_format use the API defaults.
             "prompt": prompt if prompt is not None else load_prompt(prompt_file),
             "image_input": image_urls[:14],
-            "aspect_ratio": "9:16",
+            "aspect_ratio": aspect_ratio,
         },
     }
     for attempt in range(1, MAX_RETRIES + 1):

@@ -60,7 +60,7 @@ from publish_wordpress import publish_brand
 from data_store import load_fb_auth
 from constants import (
     FETCH_COMMENTS, ANALYZE_IMAGES, MAX_IMAGES_PER_POST, IMAGE_WORKERS,
-    POSTS_PER_SOURCE_DEFAULT, MIN_IMAGES_FOR_KEEP,
+    POSTS_PER_SOURCE_DEFAULT, MIN_IMAGES_FOR_KEEP, MAX_DEALS_PER_JOB,
     AI_IMAGE_BACKEND, AI_IMAGE_COMPARE, AI_IMAGE_MAX_BYTES, AI_IMAGE_WORKERS,
     DEAL_INFOGRAPHIC_PROMPT, DEAL_INPUTS_BLOCK,
     GENERATE_AI_IMAGES, INFOGRAPHIC_TEMPLATE_DIR, PAGE_SCAN_WORKERS,
@@ -443,16 +443,13 @@ def discover_post_url(url: str, cookies: dict) -> str:
     return post_id
 
 
-def process_post_url(job_dir: Path, post_id: str, url: str, cookies: dict, skip_ids: set,
+def process_post_url(job_dir: Path, post_id: str, url: str, cookies: dict,
                      brand_filter, brand_name: str) -> tuple[str | None, dict]:
     """Full processing for one bare post URL: meta fetch → brand check →
     album download via media_id → process/analyze → organize. The brand
     filter here is the effective (limit-aware) one — this is the only place
     a post URL's text is checked, so the testing cap applies to post URLs
     too."""
-    if post_id in skip_ids:
-        print(f"  ⏭️  Already processed in a previous run: {post_id}")
-        return None, {}
     if post_already_output(job_dir, post_id):
         print(f"  ⏭️  Already processed in this job: {post_id}")
         return None, {}
@@ -567,13 +564,26 @@ def discover_page_or_group_posts(job_dir: Path, url: str, src_type: str, cookies
     }
 
 
+def _count_publishable_deals(mapping: dict) -> int:
+    """Entries in a mapping that carry exactly ONE deal — the ones the
+    infographic/publish stages actually use (the MAX_DEALS_PER_JOB cap
+    counts these)."""
+    return sum(1 for e in mapping.values()
+               if len(e.get("deals") or []) == 1)
+
+
 def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
-                                 skip_ids: set, brand_filter,
-                                 brand_name: str) -> tuple[list[str], dict]:
+                                 brand_filter,
+                                 brand_name: str,
+                                 deal_budget: int = 0) -> tuple[list[str], dict]:
     """Processing phase for one discovered page/group source: brand
     re-check, comments, image download/processing/analysis, and
     filter/organize — for every post discover_page_or_group_posts() already
-    found."""
+    found.
+
+    `deal_budget` is this job's remaining MAX_DEALS_PER_JOB allowance
+    (0 = unlimited) — once this source has produced that many publishable
+    deals, the remaining posts of the source are skipped (early stop)."""
     url = discovered["url"]
     posts = discovered["posts"]
     text_key = discovered["text_key"]
@@ -584,10 +594,15 @@ def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
     processed_ids = []
     all_mapping = {}
     staging_root = job_dir / "_staging"
+    source_deal_count = 0  # publishable deals produced by this source so far
 
     for post in posts:
+        if deal_budget and source_deal_count >= deal_budget:
+            print(f"  ✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals this job) — "
+                  f"stopping source early, remaining posts skipped")
+            break
         post_id = post.get("post_id")
-        if not post_id or post_id in skip_ids:
+        if not post_id:
             continue
         if post_already_output(job_dir, post_id):
             continue
@@ -646,6 +661,7 @@ def process_page_or_group_posts(job_dir: Path, discovered: dict, cookies: dict,
         )
         written = organize_or_discard(job_dir, staging_root, post_id, text_brand, mapping)
         all_mapping.update(written)
+        source_deal_count += _count_publishable_deals(written)
         processed_ids.append(post_id)
 
     shutil.rmtree(scratch_root, ignore_errors=True)
@@ -824,7 +840,6 @@ def main():
     parser.add_argument("--start-date", default=None, help="YYYY-MM-DD (page/group sources only)")
     parser.add_argument("--end-date", default=None, help="YYYY-MM-DD (page/group sources only, default: today)")
     parser.add_argument("--min-comments", type=int, default=0)
-    parser.add_argument("--skip-post-ids-file", default=None, help="JSON list of post_ids to skip (cross-run dedup)")
     parser.add_argument("--brand", default=None,
                         help="The workspace's single canonical retailer brand — only posts "
                              "whose detected brand matches are scraped/published")
@@ -852,10 +867,6 @@ def main():
     effective_filter = make_per_brand_limiter(brand_filter, args.brand_post_limit)
     if args.brand_post_limit and args.brand_post_limit > 0:
         print(f"Post limit: max {args.brand_post_limit} post(s) (testing mode).")
-
-    skip_ids = set()
-    if args.skip_post_ids_file and Path(args.skip_post_ids_file).exists():
-        skip_ids = set(json.loads(Path(args.skip_post_ids_file).read_text(encoding="utf-8")))
 
     start_dt = parse_date_arg(args.start_date, end_of_day=False)
     end_dt = parse_date_arg(args.end_date, end_of_day=True) or datetime.now(timezone.utc)
@@ -992,10 +1003,20 @@ def main():
     all_processed_ids: list[str] = []
     all_mapping: dict = {}
 
+    def _deals_so_far() -> int:
+        return _count_publishable_deals(all_mapping)
+
+    if MAX_DEALS_PER_JOB:
+        print(f"Deal cap: stopping once {MAX_DEALS_PER_JOB} valid deal(s) have been extracted "
+              f"(0 = unlimited in constants.py).")
+
     for url, post_id in discovered_post_sources:
+        if MAX_DEALS_PER_JOB and _deals_so_far() >= MAX_DEALS_PER_JOB:
+            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals) — remaining post URLs skipped")
+            break
         print(f"\nProcessing post: {url}")
         result = _with_source_retries(
-            url, lambda: process_post_url(job_dir, post_id, url, cookies, skip_ids,
+            url, lambda: process_post_url(job_dir, post_id, url, cookies,
                                           effective_filter, args.brand))
         if result:
             processed_id, mapping = result
@@ -1004,11 +1025,15 @@ def main():
                 all_mapping.update(mapping)
 
     for discovered in discovered_page_group_sources:
+        if MAX_DEALS_PER_JOB and _deals_so_far() >= MAX_DEALS_PER_JOB:
+            print(f"\n✂️  Deal cap reached ({MAX_DEALS_PER_JOB} valid deals) — remaining sources skipped")
+            break
         print(f"\nProcessing source: {discovered['url']}  ({len(discovered['posts'])} post(s))")
+        budget_left = (MAX_DEALS_PER_JOB - _deals_so_far()) if MAX_DEALS_PER_JOB else 0
         result = _with_source_retries(
             discovered["url"],
-            lambda d=discovered: process_page_or_group_posts(job_dir, d, cookies, skip_ids,
-                                                             brand_filter, args.brand))
+            lambda d=discovered, b=budget_left: process_page_or_group_posts(
+                job_dir, d, cookies, brand_filter, args.brand, deal_budget=b))
         if result:
             ids, mapping = result
             all_processed_ids.extend(ids)

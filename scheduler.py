@@ -157,11 +157,13 @@ def _do_scan(workspace_id: str, manual: bool = False):
     existing_state = ws.get("schedule_state") or {}
 
     scan_log_lines = []
+    is_youtube = (ws.get("platform") or "facebook") == "youtube"
     scan_log_lines.append(f"{'━' * 60}")
-    scan_log_lines.append(f"📋 FACEBOOK SOURCE SCAN — {ws['name']}")
+    scan_log_lines.append(f"📋 {'YOUTUBE' if is_youtube else 'FACEBOOK'} SOURCE SCAN — {ws['name']}")
     scan_log_lines.append(f"   Triggered by: {'Run Now (manual)' if manual else 'Schedule'}")
     scan_log_lines.append(f"   Sources: {len(sources)}")
-    scan_log_lines.append(f"   Min comments: {min_comments}")
+    if not is_youtube:
+        scan_log_lines.append(f"   Min comments: {min_comments}")
     scan_log_lines.append("")
 
     if not sources:
@@ -190,7 +192,7 @@ def _do_scan(workspace_id: str, manual: bool = False):
     end_date = now_utc.date().isoformat()
 
     scan_log_lines.append(f"📅 Date window: {start_date} → {end_date}")
-    scan_log_lines.append(f"🚀 Launching scrape job with {len(sources)} source(s):")
+    scan_log_lines.append(f"🚀 Launching {'youtube' if is_youtube else 'scrape'} job with {len(sources)} source(s):")
     for s in sources:
         scan_log_lines.append(f"   • [{s.get('type')}] {s.get('url')}")
     scan_log_lines.append("")
@@ -202,8 +204,7 @@ def _do_scan(workspace_id: str, manual: bool = False):
         end_date=end_date,
         min_comments=min_comments,
         triggered_by="manual-run-now" if manual else "schedule",
-        # No skip_post_ids — scheduled runs process every post in the date
-        # window, exactly like a manual run (no cross-run post skipping).
+        # Every run processes fresh — no cross-run skipping.
     )
     for line in scan_log_lines:
         append_log(job_id, line)

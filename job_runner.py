@@ -28,9 +28,9 @@ from data_store import (
 
 
 def _merge_manifest_into_workspace(job_id: str, workspace_id: str):
-    """After a job finishes, fold the post IDs it processed into the
-    workspace's schedule_state so the next scheduled/manual run skips them
-    (cross-run dedup)."""
+    """After a job finishes, fold its job id + processed count into the
+    workspace's schedule_state for the UI's last-run display. No
+    processed-ID dedup state is kept — every run processes fresh."""
     manifest_file = OUTPUT_DIR / job_id / "manifest.json"
     if not manifest_file.exists():
         return
@@ -39,21 +39,17 @@ def _merge_manifest_into_workspace(job_id: str, workspace_id: str):
     except Exception:
         return
 
-    new_ids = manifest.get("processed_post_ids") or []
+    processed_count = len(manifest.get("processed_post_ids") or [])
     ws = next((w for w in load_workspaces() if w["id"] == workspace_id), None)
     if not ws:
         return
 
     state = ws.get("schedule_state") or {}
-    existing = set(state.get("processed_post_ids") or [])
-    merged = list(existing | set(new_ids))[-5000:]  # cap unbounded growth
-
     update_workspace(workspace_id, {
         "schedule_state": {
             **state,
-            "processed_post_ids": merged,
             "last_job_id": job_id,
-            "last_matched_count": len(new_ids),
+            "last_matched_count": processed_count,
         },
     })
 
@@ -162,8 +158,8 @@ def launch_scrape_job(
     end_date: str | None = None,
     min_comments: int = 0,
     triggered_by: str = "manual",
-    skip_post_ids: list[str] | None = None,
     brand_post_limit: int = 0,
+    video_limit: int = 0,
 ) -> str:
     """Create a job record for `ws` and start run_facebook.py in the
     background. ONE job does everything: discovery → image
@@ -196,6 +192,7 @@ def launch_scrape_job(
         "workspace_id": ws["id"],
         "workspace_name": ws["name"],
         "job_kind": "scrape",
+        "platform": ws.get("platform") or "facebook",
         "brand": brand,
         "brand_slug": brand_slug,
         "publish_target": publish_target,
@@ -205,6 +202,7 @@ def launch_scrape_job(
         "end_date": end_date,
         "min_comments": min_comments,
         "brand_post_limit": brand_post_limit or 0,
+        "video_limit": video_limit or 0,
         "status": "queued",
         "triggered_by": triggered_by,
         "created_at": datetime.now().isoformat(),
@@ -222,44 +220,66 @@ def launch_scrape_job(
     sources_file.write_text(json.dumps(sources, ensure_ascii=False), encoding="utf-8")
     temp_files = [sources_file]
 
-    cmd = [
-        sys.executable, str(BASE_DIR / "run_facebook.py"),
-        "--job-id", job_id,
-        "--sources-file", str(sources_file),
-        "--min-comments", str(min_comments or 0),
-        "--publish-target", publish_target,
-    ]
-    if brand:
-        cmd += ["--brand", brand]
-    if page_id:
-        cmd += ["--page-id", page_id]
-    if page_title:
-        cmd += ["--page-title", page_title]
-    if week_start:
-        cmd += ["--week-start", week_start]
-    if brand_post_limit and brand_post_limit > 0:
-        cmd += ["--brand-post-limit", str(brand_post_limit)]
-    if start_date:
-        cmd += ["--start-date", start_date]
-    if end_date:
-        cmd += ["--end-date", end_date]
-
-    if skip_post_ids:
-        skip_file = DATA_DIR / f"skip_{job_id}.json"
-        skip_file.write_text(json.dumps(list(skip_post_ids)), encoding="utf-8")
-        temp_files.append(skip_file)
-        cmd += ["--skip-post-ids-file", str(skip_file)]
+    if (ws.get("platform") or "facebook") == "youtube":
+        # YouTube pipeline: sources are channel URLs (scanned within the
+        # week-start weekday window) and/or video URLs. min_comments /
+        # date ranges / brand post caps don't apply — the channel scan's
+        # window IS the date filter (week_start → run time).
+        cmd = [
+            sys.executable, str(BASE_DIR / "run_youtube.py"),
+            "--job-id", job_id,
+            "--sources-file", str(sources_file),
+            "--publish-target", publish_target,
+        ]
+        if brand:
+            cmd += ["--brand", brand]
+        if page_id:
+            cmd += ["--page-id", page_id]
+        if page_title:
+            cmd += ["--page-title", page_title]
+        if week_start:
+            cmd += ["--week-start", week_start]
+        if video_limit and video_limit > 0:
+            cmd += ["--video-limit", str(video_limit)]
+    else:
+        cmd = [
+            sys.executable, str(BASE_DIR / "run_facebook.py"),
+            "--job-id", job_id,
+            "--sources-file", str(sources_file),
+            "--min-comments", str(min_comments or 0),
+            "--publish-target", publish_target,
+        ]
+        if brand:
+            cmd += ["--brand", brand]
+        if page_id:
+            cmd += ["--page-id", page_id]
+        if page_title:
+            cmd += ["--page-title", page_title]
+        if week_start:
+            cmd += ["--week-start", week_start]
+        if brand_post_limit and brand_post_limit > 0:
+            cmd += ["--brand-post-limit", str(brand_post_limit)]
+        if start_date:
+            cmd += ["--start-date", start_date]
+        if end_date:
+            cmd += ["--end-date", end_date]
 
     # ── Write startup log entries ──
     ts = datetime.now().strftime("%H:%M:%S")
     append_log(job_id, f"[{ts}] ── Job {job_id[:8]}... created ({triggered_by}) ──────────────")
     append_log(job_id, f"[{ts}] Workspace     : {ws['name']}")
+    append_log(job_id, f"[{ts}] Platform      : {ws.get('platform') or 'facebook'}")
     append_log(job_id, f"[{ts}] Brand         : {brand or '(any single-detected brand)'}")
     append_log(job_id, f"[{ts}] Publishing    : {publish_target}{f' (page {page_id})' if page_id else ' — not configured (skipped)'}")
-    append_log(job_id, f"[{ts}] Min comments  : {min_comments or 0}")
-    if brand_post_limit and brand_post_limit > 0:
-        append_log(job_id, f"[{ts}] Post limit    : max {brand_post_limit} post(s) (testing)")
-    append_log(job_id, f"[{ts}] Date window   : {start_date or 'open'} → {end_date or 'today'}")
+    if (ws.get("platform") or "facebook") == "youtube":
+        append_log(job_id, f"[{ts}] Scan window   : week starts {week_start or 'saturday'} → now")
+        if video_limit and video_limit > 0:
+            append_log(job_id, f"[{ts}] Video limit   : max {video_limit} video(s) (testing)")
+    else:
+        append_log(job_id, f"[{ts}] Min comments  : {min_comments or 0}")
+        if brand_post_limit and brand_post_limit > 0:
+            append_log(job_id, f"[{ts}] Post limit    : max {brand_post_limit} post(s) (testing)")
+        append_log(job_id, f"[{ts}] Date window   : {start_date or 'open'} → {end_date or 'today'}")
     append_log(job_id, f"[{ts}] Sources ({len(sources)}):")
     for s in sources:
         append_log(job_id, f"[{ts}]   [{s.get('type') or 'auto'}] {s.get('url')}")

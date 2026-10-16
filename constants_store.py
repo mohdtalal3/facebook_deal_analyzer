@@ -34,6 +34,13 @@ EDITABLE: dict[str, tuple] = {
                           "Parallel page/group URL discovery threads in Phase 1"),
     "MIN_IMAGES_FOR_KEEP": (int, "Pipeline toggles", "Min images to keep",
                             "A post needs more than this many images to be kept (brand filter)"),
+    "MAX_DEALS_PER_JOB": (int, "Pipeline toggles", "Max deals per job",
+                          "Stop a job early once this many valid deals are extracted (0 = unlimited). "
+                          "Newer sources are processed first — remaining older posts/videos are skipped."),
+
+    # ── YouTube pipeline ──
+    "YT_TRANSCRIPT_RETRIES": (int, "YouTube pipeline", "Transcript retries",
+                              "Transcript fetch attempts per video before the video is skipped"),
 
     # ── AI deal infographics ──
     "GENERATE_AI_IMAGES": (bool, "AI deal infographics", "Generate AI infographics",

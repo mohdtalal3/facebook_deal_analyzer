@@ -42,6 +42,7 @@ _lock = threading.Lock()
 # ── WORKSPACES ──────────────────────────────────────────────────────────────
 
 PUBLISH_TARGETS = ("retailshout", "aos")
+PLATFORMS = ("facebook", "youtube")
 
 
 def normalize_workspace(ws: dict) -> dict:
@@ -75,6 +76,9 @@ def normalize_workspace(ws: dict) -> dict:
     if ws.get("publish_target") not in PUBLISH_TARGETS:
         legacy = ws.get("food_publish_target") or ws.get("non_food_publish_target")
         ws["publish_target"] = legacy if legacy in PUBLISH_TARGETS else "retailshout"
+    # Platform (facebook | youtube) — defaults older workspaces to facebook.
+    if ws.get("platform") not in PLATFORMS:
+        ws["platform"] = "facebook"
     # Drop the removed food/non-food + image-prompt config entirely.
     for key in ("food_page_id", "food_publish_target", "non_food_page_id",
                 "non_food_publish_target", "categories", "image_prompt"):

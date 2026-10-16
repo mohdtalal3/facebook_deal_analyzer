@@ -39,6 +39,47 @@
       <div class="card-body p-4">
         <form method="POST" action="{{ url_for('workspace_run', workspace_id=workspace.id) }}" id="runForm">
 
+          {% if workspace.platform == 'youtube' %}
+          <!-- YouTube sources — channel scan and/or direct videos -->
+          <label class="form-label mb-2">
+            <i class="bi bi-youtube me-1" style="color:#ff0000"></i>
+            YouTube URLs <span class="text-danger">*</span>
+          </label>
+          <ul class="nav nav-tabs mb-2" id="sourceTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="tab-channel-btn" data-bs-toggle="tab" data-bs-target="#tab-channel" type="button" role="tab">
+                Channel URLs
+              </button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="tab-video-btn" data-bs-toggle="tab" data-bs-target="#tab-video" type="button" role="tab">
+                Video URLs
+              </button>
+            </li>
+          </ul>
+          <div class="tab-content mb-1">
+            <div class="tab-pane fade show active" id="tab-channel" role="tabpanel">
+              <textarea name="channel_urls" class="form-control source-input" rows="4"
+                        placeholder="One YouTube channel URL per line:&#10;https://www.youtube.com/@3rdShiftCouponer"></textarea>
+              <div class="form-text">Scans the channel's uploads from this week's {{ (workspace.week_start or 'friday') | capitalize }} window (back to Wednesday) up to now.</div>
+            </div>
+            <div class="tab-pane fade" id="tab-video" role="tabpanel">
+              <textarea name="video_urls" class="form-control source-input" rows="4"
+                        placeholder="One YouTube video URL per line:&#10;https://www.youtube.com/watch?v=abc123"></textarea>
+              <div class="form-text">Fetches the transcript of exactly these videos — no date window applied.</div>
+            </div>
+          </div>
+          <div class="form-text d-flex align-items-center justify-content-between mb-4">
+            <span>Pick the matching tab for each URL — channels are scanned, videos are fetched directly.</span>
+            <span id="urlCount" style="font-weight:600;color:#3b82f6;"></span>
+          </div>
+          <div class="alert alert-info py-2" style="font-size:12.5px;">
+            <i class="bi bi-info-circle me-1"></i>
+            Deals are extracted from the video transcripts — every deal found becomes its own entry,
+            and its branded infographic is generated in one step from the deal details (products drawn
+            on a clean white background) before the publishing stage.
+          </div>
+          {% else %}
           <!-- URLs — explicit type per tab, no auto-detection -->
           <label class="form-label mb-2">
             <i class="bi bi-facebook me-1" style="color:#1877f2"></i>
@@ -82,7 +123,9 @@
             <span>Pick the matching tab for each URL — this tells the scraper exactly what to fetch.</span>
             <span id="urlCount" style="font-weight:600;color:#3b82f6;"></span>
           </div>
+          {% endif %}
 
+          {% if workspace.platform != 'youtube' %}
           <div class="row g-3 mb-4">
             <div class="col-sm-6">
               <label class="form-label"><i class="bi bi-calendar-event me-1"></i>Start Date</label>
@@ -112,6 +155,15 @@
             <input type="number" name="brand_post_limit" class="form-control" min="0" value="0" placeholder="0">
             <div class="form-text">Testing limit: max posts kept across all sources. 0 = no limit.</div>
           </div>
+          {% else %}
+          <div class="mb-4">
+            <label class="form-label">
+              <i class="bi bi-funnel me-1"></i>Max Videos <span class="badge bg-warning-subtle text-warning-emphasis" style="font-size:10px;">testing</span>
+            </label>
+            <input type="number" name="video_limit" class="form-control" min="0" value="0" placeholder="0">
+            <div class="form-text">Testing limit: max videos processed across all sources. 0 = no limit.</div>
+          </div>
+          {% endif %}
 
           <button type="submit" class="btn btn-primary w-100 py-2" id="runBtn">
             <i class="bi bi-play-fill me-2"></i>Run Bot
@@ -132,6 +184,16 @@
           <tr>
             <td class="ps-4 text-muted" style="width:40%;padding:10px 0 10px 16px;">Name</td>
             <td class="pe-4" style="padding:10px 16px 10px 0;font-weight:600;">{{ workspace.name }}</td>
+          </tr>
+          <tr>
+            <td class="ps-4 text-muted" style="width:40%;padding:10px 0 10px 16px;">Platform</td>
+            <td class="pe-4" style="padding:10px 16px 10px 0;font-weight:600;">
+              {% if workspace.platform == 'youtube' %}
+                <span class="badge" style="background:#fee2e2;color:#b91c1c;font-weight:600;font-size:10.5px;"><i class="bi bi-youtube me-1"></i>YouTube</span>
+              {% else %}
+                <span class="badge" style="background:#dbeafe;color:#1e40af;font-weight:600;font-size:10.5px;"><i class="bi bi-facebook me-1"></i>Facebook</span>
+              {% endif %}
+            </td>
           </tr>
           <tr>
             <td class="ps-4 text-muted" style="padding:10px 0 10px 16px;">Default Min Comments</td>
@@ -313,6 +375,29 @@
             </div>
           </div>
 
+          {% if workspace.platform == 'youtube' %}
+          {% set schedule_channel_srcs = (workspace.fb_sources or []) | selectattr('type', 'equalto', 'channel') | map(attribute='url') | list %}
+          {% set schedule_video_srcs = (workspace.fb_sources or []) | selectattr('type', 'equalto', 'video') | map(attribute='url') | list %}
+          <div class="row g-3 mb-4">
+            <div class="col-sm-6">
+              <label class="form-label">
+                <i class="bi bi-youtube me-1" style="color:#ff0000"></i>Channel URLs
+              </label>
+              <textarea name="schedule_channel_urls" class="form-control" rows="3"
+                        placeholder="One channel URL per line:&#10;https://www.youtube.com/@3rdShiftCouponer">{{ schedule_channel_srcs | join('\n') }}</textarea>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label">
+                <i class="bi bi-youtube me-1" style="color:#ff0000"></i>Video URLs
+              </label>
+              <textarea name="schedule_video_urls" class="form-control" rows="3"
+                        placeholder="One video URL per line:&#10;https://www.youtube.com/watch?v=abc123">{{ schedule_video_srcs | join('\n') }}</textarea>
+            </div>
+          </div>
+          <div class="form-text mb-4" style="margin-top:-12px;">
+            Channels are re-scanned automatically on the schedule above (window: this week's {{ (workspace.week_start or 'friday') | capitalize }} → run date, as configured on the workspace's Week Starts field).
+          </div>
+          {% else %}
           {% set schedule_page_srcs = (workspace.fb_sources or []) | selectattr('type', 'equalto', 'page') | map(attribute='url') | list %}
           {% set schedule_group_srcs = (workspace.fb_sources or []) | selectattr('type', 'equalto', 'group') | map(attribute='url') | list %}
           <div class="row g-3 mb-4">
@@ -334,6 +419,7 @@
           <div class="form-text mb-4" style="margin-top:-12px;">
             Re-scraped automatically on the schedule above. Use the Run Bot form (with its Post URLs tab) for one-off single posts — a recurring schedule doesn't apply to a specific post.
           </div>
+          {% endif %}
 
           <div class="row g-3 mb-4">
             <div class="col-sm-6">

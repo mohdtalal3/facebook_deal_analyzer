@@ -30,6 +30,35 @@
       <div class="card-body p-4">
         <form method="POST">
           <div class="mb-4">
+            <label class="form-label">
+              <i class="bi bi-collection-play me-1"></i>Platform <span class="text-danger">*</span>
+            </label>
+            <div class="d-flex gap-3" id="platformToggle" data-is-youtube="{{ 'true' if workspace and workspace.platform == 'youtube' else 'false' }}">
+              <div class="form-check form-check-inline m-0">
+                <input class="form-check-input" type="radio" name="platform" id="platformFacebook"
+                       value="facebook" {% if not workspace or workspace.platform != 'youtube' %}checked{% endif %}
+                       onchange="document.getElementById('fbOnlyFields').style.display='block';document.getElementById('ytWeekHint').style.display='none';">
+                <label class="form-check-label" for="platformFacebook">
+                  <i class="bi bi-facebook me-1" style="color:#1877f2"></i>Facebook
+                </label>
+              </div>
+              <div class="form-check form-check-inline m-0">
+                <input class="form-check-input" type="radio" name="platform" id="platformYoutube"
+                       value="youtube" {% if workspace and workspace.platform == 'youtube' %}checked{% endif %}
+                       onchange="document.getElementById('fbOnlyFields').style.display='none';document.getElementById('ytWeekHint').style.display='block';">
+                <label class="form-check-label" for="platformYoutube">
+                  <i class="bi bi-youtube me-1" style="color:#ff0000"></i>YouTube
+                </label>
+              </div>
+            </div>
+            <div class="form-text">
+              Facebook workspaces fetch deals from Facebook posts/pages/groups. YouTube workspaces
+              fetch deals from YouTube video transcripts (channel scans and/or single videos) — deals
+              get AI-generated product images since there is no reference photo.
+            </div>
+          </div>
+
+          <div class="mb-4">
             <label class="form-label">Workspace Name <span class="text-danger">*</span></label>
             <input type="text" name="name" class="form-control" required
                    placeholder="e.g. ALDI Finds, Kroger Deals"
@@ -91,10 +120,13 @@
                 <option value="{{ d }}" {% if (workspace.week_start if workspace and workspace.week_start is defined else 'friday') == d %}selected{% endif %}>{{ d | capitalize }}</option>
                 {% endfor %}
               </select>
+              <div class="form-text" id="ytWeekHint">
+                For YouTube workspaces this is also the channel-scan window: each scan looks back to this week's Wednesday.
+              </div>
             </div>
           </div>
 
-          <div class="mb-4">
+          <div class="mb-4" id="fbOnlyFields">
             <label class="form-label">
               <i class="bi bi-chat-square-text me-1"></i>Default Minimum Comments
             </label>
@@ -127,4 +159,11 @@
     </div>
   </div>
 </div>
+<script>
+  // Initial platform-field visibility (kept out of inline CSS/JS so the
+  // template's Jinja syntax never lands inside a style attribute or script).
+  const isYoutube = document.getElementById('platformToggle').dataset.isYoutube === 'true';
+  document.getElementById('ytWeekHint').style.display = isYoutube ? 'block' : 'none';
+  document.getElementById('fbOnlyFields').style.display = isYoutube ? 'none' : 'block';
+</script>
 {% endblock %}

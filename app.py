@@ -45,13 +45,17 @@ def _brand_config_from_form() -> dict:
     """Parse the workspace's single-brand configuration from the workspace
     form. Each workspace tracks exactly ONE brand and publishes to ONE
     website + WordPress page (the food/non-food category structure is gone —
-    deals are not categorized). Returns the config dict; `brand` may be
-    empty (the caller validates), everything else is normalized."""
+    deals are not categorized). `platform` selects the deal source:
+    facebook (post/page/group URLs) or youtube (channel/video URLs).
+    Returns the config dict; `brand` may be empty (the caller validates),
+    everything else is normalized."""
     brand = (request.form.get("brand") or "").strip()
     week_start = (request.form.get("week_start") or "").strip().lower()
+    platform = (request.form.get("platform") or "facebook").strip().lower()
 
     target = request.form.get("publish_target")
     return {
+        "platform": platform if platform in ("facebook", "youtube") else "facebook",
         "brand": brand if brand in brand_mapping.BRAND_KEYWORDS else "",
         "publish_target": target if target in ("retailshout", "aos") else "retailshout",
         "page_id": (request.form.get("page_id") or "").strip(),
@@ -62,10 +66,18 @@ def _brand_config_from_form() -> dict:
     }
 
 
-def _explicit_sources_from_form() -> list[dict]:
-    """Build a typed sources list from the three explicit Post/Page/Group
-    URL fields — the user tells us the type, we don't guess it (share
-    links, mobile links, etc. make URL-shape guessing unreliable)."""
+def _explicit_sources_from_form(platform: str = "facebook") -> list[dict]:
+    """Build a typed sources list from the workspace form's explicit URL
+    fields — the user tells us the type, we don't guess it (share links,
+    mobile links, etc. make URL-shape guessing unreliable).
+
+    facebook: Post/Page/Group URL fields.
+    youtube:  Channel/Video URL fields (channel = scan its uploads within
+              the week window; video = fetch that exact video)."""
+    if platform == "youtube":
+        sources = [{"url": u, "type": "channel"} for u in _urls_from_field("channel_urls")]
+        sources += [{"url": u, "type": "video"} for u in _urls_from_field("video_urls")]
+        return sources
     sources = []
     sources += [{"url": u, "type": "post"} for u in _urls_from_field("post_urls")]
     sources += [{"url": u, "type": "page"} for u in _urls_from_field("page_urls")]
@@ -184,9 +196,12 @@ def workspace_run(workspace_id):
         flash("Workspace not found.", "danger")
         return redirect(url_for("index"))
 
-    sources = _explicit_sources_from_form()
+    sources = _explicit_sources_from_form(ws.get("platform") or "facebook")
     if not sources:
-        flash("Please enter at least one Facebook URL (Post, Page, or Group).", "warning")
+        if (ws.get("platform") or "facebook") == "youtube":
+            flash("Please enter at least one YouTube URL (Channel or Video).", "warning")
+        else:
+            flash("Please enter at least one Facebook URL (Post, Page, or Group).", "warning")
         return redirect(url_for("workspace_detail", workspace_id=workspace_id))
 
     start_date = request.form.get("start_date", "").strip() or None
@@ -198,6 +213,9 @@ def workspace_run(workspace_id):
     brand_limit_raw = request.form.get("brand_post_limit", "").strip()
     brand_post_limit = int(brand_limit_raw) if brand_limit_raw.isdigit() else 0
 
+    video_limit_raw = request.form.get("video_limit", "").strip()
+    video_limit = int(video_limit_raw) if video_limit_raw.isdigit() else 0
+
     job_id = launch_scrape_job(
         ws,
         sources=sources,
@@ -206,6 +224,7 @@ def workspace_run(workspace_id):
         min_comments=min_comments,
         triggered_by="manual",
         brand_post_limit=brand_post_limit,
+        video_limit=video_limit,
     )
 
     return redirect(url_for("job_detail", job_id=job_id))
@@ -304,10 +323,18 @@ def workspace_schedule_save(workspace_id):
 
     page_urls = _urls_from_field("schedule_page_urls")
     group_urls = _urls_from_field("schedule_group_urls")
-    sources = (
-        [{"url": u, "type": "page"} for u in page_urls] +
-        [{"url": u, "type": "group"} for u in group_urls]
-    )
+    channel_urls = _urls_from_field("schedule_channel_urls")
+    video_urls = _urls_from_field("schedule_video_urls")
+    if (ws.get("platform") or "facebook") == "youtube":
+        sources = (
+            [{"url": u, "type": "channel"} for u in channel_urls] +
+            [{"url": u, "type": "video"} for u in video_urls]
+        )
+    else:
+        sources = (
+            [{"url": u, "type": "page"} for u in page_urls] +
+            [{"url": u, "type": "group"} for u in group_urls]
+        )
 
     ws["fb_sources"] = sources
     ws["min_comments"] = min_comments
