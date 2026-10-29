@@ -154,6 +154,11 @@ def _do_scan(workspace_id: str, manual: bool = False):
     min_comments = schedule.get("min_comments", ws.get("min_comments", 0)) or 0
 
     now_utc = datetime.now(timezone.utc)
+    # Date-window math must use the schedule's timezone (e.g. America/Los_Angeles),
+    # not UTC — a Thursday 17:00 PDT run is already Friday in UTC, which would
+    # collapse the rolling weekday window to a single day.
+    window_tz = ZoneInfo(_safe_tz(schedule.get("timezone") or "UTC"))
+    now_window = now_utc.astimezone(window_tz)
     existing_state = ws.get("schedule_state") or {}
 
     scan_log_lines = []
@@ -180,16 +185,21 @@ def _do_scan(workspace_id: str, manual: bool = False):
         # every run scrapes from the MOST RECENT monday (run date minus the
         # day difference) → run date. A new monday each week.
         target = WEEKDAYS[fixed_start]
-        days_back = (now_utc.weekday() - target) % 7
-        start_date = (now_utc - timedelta(days=days_back)).date().isoformat()
+        days_back = (now_window.weekday() - target) % 7
+        start_date = (now_window - timedelta(days=days_back)).date().isoformat()
         scan_log_lines.append(f"🗓️  Fixed weekday start: {fixed_start} → {start_date}")
     else:
         last_run_at = existing_state.get("last_run_at")
         if last_run_at:
-            start_date = last_run_at[:10]
+            # last_run_at is stored as UTC ISO — convert to the schedule
+            # timezone so the window start matches the user's local day.
+            try:
+                start_date = datetime.fromisoformat(last_run_at).astimezone(window_tz).date().isoformat()
+            except Exception:
+                start_date = last_run_at[:10]
         else:
-            start_date = (now_utc - timedelta(days=7)).date().isoformat()
-    end_date = now_utc.date().isoformat()
+            start_date = (now_window - timedelta(days=7)).date().isoformat()
+    end_date = now_window.date().isoformat()
 
     scan_log_lines.append(f"📅 Date window: {start_date} → {end_date}")
     scan_log_lines.append(f"🚀 Launching {'youtube' if is_youtube else 'scrape'} job with {len(sources)} source(s):")
