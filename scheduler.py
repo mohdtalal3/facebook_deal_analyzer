@@ -344,6 +344,22 @@ def init_scheduler():
         max_instances=1,
         coalesce=True,
     )
+    # Daily cleanup of job data older than the retention window
+    # (DATA_RETENTION_DAYS env var, default 7).
+    from cleanup import cleanup_old_data, RETENTION_DAYS
+    _scheduler.add_job(
+        cleanup_old_data,
+        trigger=CronTrigger(hour=3, minute=30, timezone="UTC"),
+        id="old_data_cleanup",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
     _scheduler.start()
     # Restore schedules immediately on startup without waiting for the first tick
     _watcher_tick()
+    # Free disk space right away instead of waiting for the daily slot
+    try:
+        cleanup_old_data(RETENTION_DAYS)
+    except Exception as e:
+        print(f"[scheduler] Startup cleanup failed: {e}")
